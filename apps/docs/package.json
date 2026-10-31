@@ -12,14 +12,14 @@
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
-    "fumadocs-core": "16.15.11",
+    "fumadocs-core": "16.17.9",
     "fumadocs-mdx": "14.3.2",
-    "fumadocs-ui": "16.15.11",
+    "fumadocs-ui": "16.17.9",
     "@better-i18n/core": "workspace:^",
     "lucide-react": "^0.577.0",
-    "next": "16.4.3",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "next": "15.5.28",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tailwind-merge": "^3.7.0",
     "zbsearch": "^4.0.0"
   },
@@ -33,6 +33,6 @@
     "serve": "^14.2.5",
     "tailwindcss": "^4.2.4",
     "typescript": "^5.9.3",
-    "wrangler": "^4.132.0"
+    "wrangler": "^4.154.0"
   }
 }
