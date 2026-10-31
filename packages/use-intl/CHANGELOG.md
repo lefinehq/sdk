@@ -1,0 +1,514 @@
+# @better-i18n/use-intl
+
+## 0.11.0
+
+### Minor Changes
+
+- `BetterI18nProvider` gains `onUpdate` (a verified update replaced the active locale's messages, with `revision`, `version`, `changesUrl`) and `onCacheStatus`. New `useCacheStatus()` hook and `useBetterI18n().cacheStatus` (`stale`, `revision`, `integrityFailures`, `storageError`) for a "showing saved translations" banner. A focus-triggered check no longer re-renders unless the status changed.
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.15.0
+
+## 0.10.1
+
+### Patch Changes
+
+- Stop revalidating on every client navigation.
+
+  The revalidation effects listed the namespace scope in their dependency array. A
+  router hands a fresh scope on each navigation, so both effects tore down and
+  re-ran per page change, and each re-run forced a manifest read — one extra
+  round-trip on the navigation path, measured in production.
+
+  Revalidation asks "has a new version been published?", which does not depend on
+  which page is open. The effects now key on locale and core only, and read the
+  current scope from a ref when they fire, so the refetch that follows a version
+  change still covers whatever the page needs at that moment.
+
+## 0.10.0
+
+### Minor Changes
+
+- Stop re-downloading every namespace on the client when SSR already delivered the messages.
+
+  `BetterI18nProvider` used to call `getMessages(locale)` on every mount, with no namespace scope, even when the SSR/prop payload already matched the active locale. On a prerendered site each new document starts with an empty in-memory cache, so that was a full re-fetch of the data the user was already looking at — and because no namespaces were passed, it asked for every namespace the manifest declares.
+
+  Two changes:
+
+  - The provider now fetches only when the active locale has no payload on screen. Freshness is kept by a manifest version check (`revalidate`, ETag-aware, typically a single 304) scheduled at idle, instead of a payload download.
+  - The provider accepts and honours the `namespaces` prop it already declared in its type, passing it to `getMessages` and `revalidate` so client fetches stay as narrow as the server load.
+
+  `I18nCore.revalidate` takes an optional `{ namespaces }` argument so the refetch after a version change matches the scope of the original load. Existing calls are unaffected — it defaults to the `namespaces` given to `createI18nCore`.
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @better-i18n/core@0.14.0
+
+## 0.9.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.13.0
+
+## 0.9.2
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @better-i18n/core@0.12.0
+
+## 0.9.1
+
+### Patch Changes
+
+- Suppress "useRouter must be used inside RouterProvider" console warning in non-TanStack Router apps (e.g. react-router-dom). Pass `{ warn: false }` to TanStack Router's `useRouter()` — the try/catch fallback already handles missing context gracefully.
+
+## 0.9.0
+
+### Minor Changes
+
+- **SWR freshness for client-side SDKs — manifest-versioned cache + revalidate on focus/visibility.**
+
+  Long-lived tabs (Vite SPAs, static builds) no longer need a full reload to pick up newly published translations. Publish-to-live window drops from "up to the client cache TTL" (previously unbounded against `localStorage`) to "next focus / visibility event" — typically a few hundred milliseconds.
+
+  ### What changed
+
+  **`@better-i18n/core`**
+  - `getMessages()` cache keys now include the manifest-reported version for each locale (`files[locale].lastModified`, falling back to `manifest.updatedAt`). When the CDN publishes new content the version moves, every cached entry is orphaned, and the next call goes to origin. No stale hits, no TTL tuning.
+  - New `i18nCore.revalidate(locale)` — forces a manifest freshness check. Compares the cached manifest version with origin; if unchanged it exits without fetching messages. If changed it fetches fresh and notifies subscribers. Cheap: typical path is a single ETag-aware manifest fetch (~5KB, often 304).
+  - New `i18nCore.onMessagesUpdate(listener)` — subscribe to fresh messages from background revalidation. Returns an unsubscribe function.
+  - New `MessagesUpdateEvent` / `MessagesUpdateListener` types exported.
+  - Existing `getMessages` / `getManifest` / `getLocales` / `getLanguages` signatures unchanged — this release is additive.
+
+  **`@better-i18n/use-intl`**
+  - `BetterI18nProvider` subscribes to `i18nCore.onMessagesUpdate` and swaps fresh messages into state automatically when a background revalidation fetches newer content.
+  - `BetterI18nProvider` now wires `visibilitychange` and `focus` listeners to call `i18nCore.revalidate(locale)`. Dashboards and other long-lived SPA tabs now revalidate every time they regain focus. Infrastructure-agnostic — pure browser APIs, no Cloudflare / Worker coupling.
+  - The previous "skip the fetch when initial SSR messages match the current locale" short-circuit has been removed. `getMessages` is now always called on mount; with the new version-aware cache it's a memory-cache hit with zero CDN traffic, but it also lets core kick off a background revalidation if the cached version is stale.
+
+  ### Migration
+
+  None required. The public surfaces of both packages are backwards compatible. The only runtime change consumers should notice is that stale content self-heals — you can delete any manual "refresh messages" hacks you wrote to work around the previous behavior.
+
+  ### Companion platform change (BETTER-248)
+
+  This release assumes the CDN honors `Cache-Control` sanely and invalidates manifest / translation cache at the edge on publish. The required platform changes ship separately in `better-i18n-cdn` — manifest served with `s-maxage=0` and a Cloudflare Management API global purge on every `/purge` call. Without that change, this SDK still works correctly — it just inherits whatever staleness the CDN edge introduces (previously up to 10 minutes for manifest, now effectively zero).
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.11.0
+
+## 0.8.5
+
+### Patch Changes
+
+- Surface i18n lookup and ICU parse errors in development by default. Previously `BetterI18nProvider` shipped with `onError={() => {}}` which silently swallowed every missing-key and every format-parse failure — the library then returned the raw key as fallback, so a dotted path like `settings.installation.status.pendingDesc` appeared on screen with zero console output. Debugging a single instance cost ~40 minutes because the offending source string (which happened to contain `<head>`, an unmatched ICU rich-text tag) gave no runtime signal.
+
+  New default `onError` logs `[better-i18n] <code>: <message>` with the offending source on `console.warn` when `NODE_ENV !== "production"`, stays silent in production. Consumer-supplied `onError` (Sentry, telemetry, etc.) still overrides. The bootstrap-phase provider (rendered before the CDN fetch resolves) keeps the no-op intentionally so the expected first-render misses don't flood the console.
+
+  Log format includes `originalMessage` so ICU parse failures are diagnosable without re-deriving the input.
+
+## 0.8.4
+
+### Patch Changes
+
+- Pass all core config fields (including `namespaces`) through to `createI18nCore` via spread instead of listing each field individually. This ensures new core options like config-level `namespaces` automatically flow through without needing use-intl changes.
+
+## 0.8.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.10.0
+
+## 0.8.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.9.0
+
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.8.0
+
+## 0.8.0
+
+### Minor Changes
+
+- Standardize locale cookie API — `localeCookie` everywhere
+
+  **BREAKING (0.x semver):** `persistLocale` prop renamed to `localeCookie` on `BetterI18nProvider`. `getPersistedLocale()` renamed to `getLocaleCookie()` in `@better-i18n/core`.
+
+  Consistent naming across the entire stack:
+  - **Client provider:** `<BetterI18nProvider localeCookie="preferred-locale" />`
+  - **Client utility:** `getLocaleCookie("preferred-locale")` from `@better-i18n/core`
+  - **Server plugin:** `createBetterAuthProvider(i18n, { localeCookie: "preferred-locale" })`
+  - **Vite plugin:** `localeCookie: "preferred-locale"` (already used this name)
+
+  **@better-i18n/core:** New `getLocaleCookie(cookieName)` utility for non-React contexts (auth clients, analytics, fetch wrappers). BCP 47 validated, regex-safe.
+
+  **@better-i18n/use-intl:** `localeCookie` prop reads cookie on init (SPA fallback) and writes on every locale change. Merged with Vite plugin's SSR cookie — single `cookieName` resolves prop > SSR data. Provider internals hardened: lazy init, stable i18nCore instance, BCP 47 URL segment detection.
+
+  **@better-i18n/server:** `createBetterAuthProvider` gains `localeCookie` option. Detection chain: `getLocale` > `localeCookie` > `Accept-Language` > `defaultLocale`.
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.7.0
+
+## 0.7.0
+
+### Minor Changes
+
+- Read persisted locale cookie on initialization for static/SPA builds
+
+  `BetterI18nProvider` now reads the `persistLocale` cookie during initialization, before falling back to `"en"`. Previously, the cookie was written on locale change but never read back — causing locale to reset on page refresh in static/SPA builds where SSR data is unavailable.
+
+  New resolution chain: `propLocale → ssrData → persistLocale cookie → localeCookie → "en"`
+
+### Patch Changes
+
+- Remove "bun" export conditions that referenced unpublished src/ files
+
+  All packages had `"bun": "./src/*.ts"` conditions in their exports map, but `src/` is not included in the npm package (`files: ["dist"]`). Bun runtime resolves the "bun" condition before "default", causing module resolution failures for customers using Bun to build their apps.
+
+- Updated dependencies
+  - @better-i18n/core@0.6.2
+
+## 0.6.0
+
+### Minor Changes
+
+- Add locale persistence so returning visitors get their previously chosen language
+
+  **use-intl:** New `persistLocale` prop on `BetterI18nProvider`. When enabled, sets a cookie on every locale change (including initial page load). Works with any hosting provider — no Cloudflare/geo-IP dependency required.
+
+  **remix:** New `getLocaleCookieHeader(locale, request?)` method on `RemixI18n`. Returns a `Set-Cookie` header value for locale persistence, or `null` when cookie already matches (avoids redundant headers).
+
+## 0.5.1
+
+### Patch Changes
+
+- Animated locale dropdown with ElevenLabs-style hover effects
+  - Round flags (18×18, border-radius 50%) instead of rectangular
+  - Dropdown menu entrance animation (scale + fade, 150ms cubic-bezier spring)
+  - Item hover: CSS ::before pseudo-element with scale(0.97→1) + opacity animation
+  - Trigger button: same spring hover effect via CSS pseudo-element
+  - Deeper shadow and 14px border-radius for a more modern menu
+  - Menu padding 6px for proper item breathing room
+  - Active item: bold weight, persistent background via [data-active] CSS selector
+  - All animations handled via CSS — zero JS overhead, respects prefers-reduced-motion if added by consumer
+
+- Single UI source for LocaleDropdown across all adapters
+
+  Introduces `@better-i18n/core/react` — a new optional React export containing
+  `LocaleDropdownBase`, a pure presentational component with no routing hooks.
+
+  **New exports from `@better-i18n/core/react`:**
+  - `LocaleDropdownBase` — props-driven UI, no hooks, works with any router
+  - `LOCALE_DROPDOWN_CSS` — injectable CSS string for custom rendering pipelines
+  - `DATA_ATTRS` — typed constants for all `data-better-locale-*` attributes
+  - `CSS_VARS` — typed constants for all `--better-locale-*` custom properties
+  - `LocaleDropdownBaseProps`, `LocaleDropdownRenderContext`, `LocaleDropdownTriggerContext` — full type surface
+
+  **Adapter changes (all backwards compatible):**
+  - `@better-i18n/use-intl`: `LocaleDropdown` → thin wrapper (TanStack Router hooks)
+  - `@better-i18n/remix`: `LocaleDropdown` → thin wrapper (React Router hooks)
+  - `@better-i18n/next`: `LocaleDropdown` → thin wrapper (cookie + router.refresh)
+  - Eliminates ~1200 lines of duplicated UI code across the three adapters
+  - Bundle size: `@better-i18n/core` main entry remains zero-dep; React UI loads only via `./react`
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @better-i18n/core@0.6.0
+
+## 0.5.0
+
+### Minor Changes
+
+- ### @better-i18n/core
+
+  **New:** `localePrefix: "never"` option in `LocaleConfig` — disables URL locale prefixing entirely. Locale is persisted only via cookie, ideal for dashboards and apps where URL structure shouldn't change per locale.
+
+  `addLocalePrefix()` and `replaceLocaleInPath()` now respect all three modes:
+  - `"as-needed"` (default): default locale has no prefix (`/about`), others do (`/tr/about`)
+  - `"always"`: all locales get a prefix, including default (`/en/about`)
+  - `"never"`: no locale prefix for any locale — cookie-only
+
+  ### @better-i18n/use-intl
+
+  **New:** `localePrefix="never"` prop on `BetterI18nProvider`. When set, `setLocale()` skips URL mutation entirely — only persists locale to cookie and triggers `onLocaleChange` if provided.
+
+  ```tsx
+  // Dashboard — no locale in URL, cookie-only
+  <BetterI18nProvider localePrefix="never">
+    <App />
+  </BetterI18nProvider>
+  ```
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.5.0
+
+## 0.4.1
+
+### Patch Changes
+
+- ### @better-i18n/core
+
+  **New:** `localePrefix` option in `LocaleConfig` — controls URL prefix strategy:
+  - `"as-needed"` (default): default locale has no prefix (`/about`)
+  - `"always"`: all locales get a prefix, including default (`/en/about`)
+
+  `addLocalePrefix()` and `replaceLocaleInPath()` now respect this setting.
+  Previously, default locale never got a prefix regardless of configuration.
+
+  ### @better-i18n/use-intl
+
+  Updated `@better-i18n/core` dependency to include `localePrefix` support.
+  `useLocalePath().localePath()` now correctly adds prefix for default locale
+  when `localePrefix="always"` is set on the provider.
+
+- Updated dependencies
+  - @better-i18n/core@0.4.0
+
+## 0.4.0
+
+### Minor Changes
+
+- ### @better-i18n/use-intl
+
+  **Breaking:** `useLocaleRouter` is no longer exported from the main entry point. Import it from the new `/router` sub-path:
+
+  ```ts
+  // Before
+  import { useLocaleRouter } from "@better-i18n/use-intl";
+
+  // After
+  import { useLocaleRouter } from "@better-i18n/use-intl/router";
+  ```
+
+  **New:** `useLocalePath` — a router-agnostic hook for locale path building and navigation. Works with React Router, TanStack Router, or plain Vite apps without any router dependency.
+
+  ```ts
+  import { useLocalePath } from "@better-i18n/use-intl";
+
+  const { localePath, navigate, locale, isReady } = useLocalePath();
+  ```
+
+  **Fixed:**
+  - **SSR locale mismatch (critical):** When using `@better-i18n/vite` plugin with URL-based locale routing (e.g., `/:locale/*`), non-default locale URLs (like `/tr`) would display the default locale's messages instead of fetching the correct translations from CDN. The provider now correctly tracks the SSR data's locale separately from the prop locale.
+  - **`setLocale()` dual-write:** When `onLocaleChange` is provided, the provider no longer calls `window.history.replaceState` internally — the consumer's router handles URL updates exclusively, preventing race conditions.
+  - **`replaceState` locale detection:** The fallback URL updater now validates path segments against `supportedLocales` from SSR data, preventing false positives on 2-letter path segments like `/us/profile`.
+
+  ### @better-i18n/vite
+  - Inject `supportedLocales` and `localeCookie` into SSR data payload
+  - Validate detected locale against CDN manifest before injecting — falls back to default locale if unsupported
+
+## 0.3.0
+
+### Minor Changes
+
+- Add `@better-i18n/vite` plugin for zero-FOUC server-side translation injection.
+
+  **New package: `@better-i18n/vite`**
+  - Vite plugin that fetches translations server-side and injects them as `<script id="__better_i18n__">` into HTML
+  - Locale detection from URL path, cookie, and Accept-Language header
+  - Works in both dev server and production build modes
+  - Single source of truth: configure `project` once in the plugin, provider reads it automatically
+
+  **Updated: `@better-i18n/use-intl`**
+  - Provider reads SSR-injected data synchronously from DOM on first render (zero FOUC)
+  - `project` and `locale` props are now optional when using the Vite plugin
+  - Backwards compatible: explicit props still take precedence over plugin data
+
+  **Usage:**
+
+  ```ts
+  // vite.config.ts
+  import { betterI18n } from "@better-i18n/vite";
+  export default defineConfig({
+    plugins: [betterI18n({ project: "acme/dashboard" }), react()],
+  });
+  ```
+
+  ```tsx
+  // App.tsx — no project/locale/messages props needed
+  <BetterI18nProvider>
+    <LocaleDropdown />
+    <App />
+  </BetterI18nProvider>
+  ```
+
+## 0.2.2
+
+### Patch Changes
+
+- Fix LocaleDropdown crash in non-router Vite apps and add missing setLocale to useLocale hook.
+
+  **Bug fixes:**
+  - `LocaleDropdown` and `LanguageSwitcher` no longer crash when used without TanStack Router — `useLocaleRouter()` now gracefully detects router context and falls back to provider-based locale switching
+  - `useLocale()` now returns `setLocale` as documented (`{ locale, setLocale, isLoading }`)
+
+  **New features:**
+  - `BetterI18nProvider` accepts `onLocaleChange` callback for custom locale change handling
+  - Provider manages internal locale state — plain Vite/React apps can switch locales without a router
+  - `setLocale()` available via `useLocale()`, `useBetterI18n()`, and `useLocaleRouter()` contexts
+
+  **No breaking changes** — existing TanStack Router integrations continue to work as before.
+
+## 0.2.1
+
+### Patch Changes
+
+- Fix LocaleDropdown auto-placement, dark mode support, and fixed positioning strategy. Replaces manual placement calculation with @floating-ui/react for reliable viewport-aware positioning. Adds CSS custom properties for dark mode theming with `.dark` class and `[data-theme="dark"]` support.
+
+## 0.2.0
+
+### Minor Changes
+
+- Add LocaleDropdown component — accessible locale switcher with flag emojis, native language names, keyboard navigation, styled/unstyled variants, and CSS custom properties for theming
+
+### Patch Changes
+
+- Fix TypeScript build error in middleware caused by type mismatch with @tanstack/react-start/server
+- Updated dependencies
+  - @better-i18n/core@0.3.0
+
+## 0.1.17
+
+### Patch Changes
+
+- fix: update core dependency to use semver range instead of exact pin
+
+  Changes `workspace:*` to `workspace:^` so published versions use `^x.y.z` instead of exact `x.y.z`. This prevents downstream consumers from being locked to an old, potentially broken core version.
+
+## 0.1.16
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.2.4
+
+## 0.1.15
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.2.3
+
+## 0.1.14
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.2.2
+
+## 0.1.13
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.2.1
+
+## 0.1.12
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.2.0
+
+## 0.1.11
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.1.10
+
+## 0.1.10
+
+### Patch Changes
+
+- Pass storage and staticData through to core in BetterI18nProvider
+  - Provider now accepts and forwards storage, staticData, fetchTimeout, retryCount
+  - CDN failure falls back to storage/staticData instead of breaking
+
+- Updated dependencies
+  - @better-i18n/core@0.1.9
+
+## 0.1.9
+
+### Patch Changes
+
+- Ship compiled JavaScript instead of raw TypeScript source files. Packages now export pre-built `dist/` files with proper `.js`, `.d.ts`, and source maps — eliminating the need for `transpilePackages` workarounds in consumer projects.
+
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.1.8
+
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @better-i18n/core@0.1.7
+
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.1.6
+
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.1.5
+
+## 0.1.4
+
+### Patch Changes
+
+- Fix: Ensure packages are built before publishing
+  - Added `prepublishOnly` hook to `@better-i18n/core` to build dist before publish
+  - Fixed `@better-i18n/use-intl` to publish source files (consistent with `@better-i18n/next`)
+
+- Updated dependencies
+  - @better-i18n/core@0.1.4
+
+## 0.1.3
+
+### Patch Changes
+
+- Fix: Remove private workspace dependency from devDependencies
+
+  Removed `@better-i18n/typescript-config: workspace:*` from devDependencies. This was causing installation failures for consumers because the private package doesn't exist on npm and `workspace:*` couldn't be resolved during publish.
+
+- Updated dependencies
+  - @better-i18n/core@0.1.3
+
+## 0.1.2
+
+### Patch Changes
+
+- Internal/core architecture update and middleware improvements. Moved glossary and encryption to internal package. Improved Next.js and TanStack Start middleware composability.
+- Updated dependencies
+  - @better-i18n/core@0.1.2

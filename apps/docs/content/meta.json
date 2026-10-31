@@ -1,0 +1,3 @@
+{
+  "pages": ["core", "frameworks", "sdk", "mcp", "cli", "admin", "api", "oauth", "security"]
+}

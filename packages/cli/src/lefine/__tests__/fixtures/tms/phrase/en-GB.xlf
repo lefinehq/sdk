@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ADAPTED from https://support.phrase.com/hc/en-us/articles/6111346587292--XLIFF-XML-Localization-Interchange-File-Format-Strings ; target@state only with include_translation_state=true (values new|signed-off|translated). -->
+<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
+<file original="global" datatype="plaintext" source-language="de-DE" target-language="en-GB">
+<body>
+<trans-unit id="welcome">
+<source xml:lang="de-DE">Willkommen, {name}!</source>
+<target xml:lang="en-GB" state="signed-off">Welcome, {name}!</target>
+</trans-unit>
+<trans-unit id="nav.save">
+<source xml:lang="de-DE">Speichern</source>
+<target xml:lang="en-GB" state="translated">Save</target>
+</trans-unit>
+<trans-unit id="items">
+<source xml:lang="de-DE">{"one":"{count} Artikel","other":"{count} Artikel"}</source>
+<target xml:lang="en-GB">{"one":"{count} item","other":"{count} items"}</target>
+</trans-unit>
+</body>
+</file>
+</xliff>

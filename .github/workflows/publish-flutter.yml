@@ -1,0 +1,29 @@
+name: Publish Flutter Package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/flutter/**"
+  workflow_dispatch:
+
+# Needed for pub.dev OIDC authentication
+permissions:
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish to pub.dev
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/flutter
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: dart pub publish --force

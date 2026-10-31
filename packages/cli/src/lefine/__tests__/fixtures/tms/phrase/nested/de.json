@@ -1,0 +1,5 @@
+{
+  "welcome": "Willkommen, {name}!",
+  "nav": { "save": "Speichern" },
+  "items": { "one": "{count} Artikel", "other": "{count} Artikel" }
+}

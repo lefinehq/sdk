@@ -1,0 +1,124 @@
+{
+  "label": "2-after",
+  "ranAt": "2026-10-26T18:46:18.604Z",
+  "machine": {
+    "cpu": "Apple M3 Pro",
+    "cores": 11,
+    "memoryGb": 18,
+    "os": "macOS 27.0.1",
+    "arch": "arm64"
+  },
+  "versions": {
+    "next": "16.4.3",
+    "react": "19.3.0",
+    "next-intl": "4.14.9",
+    "@inlang/paraglide-js": "2.29.2",
+    "@lingui/core": "6.10.1",
+    "lefine": "0.0.0 (this repo, after)",
+    "node": "v22.23.1"
+  },
+  "edgeRtt": {
+    "url": "https://cdn.lefine.ai/flags/4x3/de.svg",
+    "first": 90,
+    "warmMedian": 22
+  },
+  "edgeDelayMs": 25,
+  "method": {
+    "warmup": 20,
+    "runs": 200,
+    "coldRuns": 3,
+    "page": "/de"
+  },
+  "results": [
+    {
+      "app": "baseline",
+      "clientJsGzip": 174938,
+      "scripts": 7,
+      "htmlGzip": 2216,
+      "coldEmptyCacheMs": 38,
+      "coldFilledCacheMs": 35,
+      "warmMedianMs": 3.28,
+      "warmP95Ms": 4.63,
+      "sample": {
+        "k001": "k001",
+        "k171": "k171",
+        "k191": "k191"
+      }
+    },
+    {
+      "app": "lefine",
+      "clientJsGzip": 176729,
+      "scripts": 8,
+      "htmlGzip": 4026,
+      "coldEmptyCacheMs": 125,
+      "coldFilledCacheMs": 66,
+      "warmMedianMs": 3.59,
+      "warmP95Ms": 4.29,
+      "sample": {
+        "k001": "Funktion 1 hält Ihr Team in jedem Projekt synchron",
+        "k171": "3 Dateien in Ordner 171",
+        "k191": "Aktualisiert am 14. März 2026 (Bericht 191)"
+      }
+    },
+    {
+      "app": "lefine-snapshot",
+      "clientJsGzip": 176751,
+      "scripts": 8,
+      "htmlGzip": 4031,
+      "coldEmptyCacheMs": 61,
+      "coldFilledCacheMs": 75,
+      "warmMedianMs": 4.14,
+      "warmP95Ms": 5.51,
+      "sample": {
+        "k001": "Funktion 1 hält Ihr Team in jedem Projekt synchron",
+        "k171": "3 Dateien in Ordner 171",
+        "k191": "Aktualisiert am 14. März 2026 (Bericht 191)"
+      }
+    },
+    {
+      "app": "next-intl",
+      "clientJsGzip": 187331,
+      "scripts": 9,
+      "htmlGzip": 3947,
+      "coldEmptyCacheMs": 56,
+      "coldFilledCacheMs": 61,
+      "warmMedianMs": 6.02,
+      "warmP95Ms": 13.54,
+      "sample": {
+        "k001": "Funktion 1 hält Ihr Team in jedem Projekt synchron",
+        "k171": "3 Dateien in Ordner 171",
+        "k191": "Aktualisiert am 14. März 2026 (Bericht 191)"
+      }
+    },
+    {
+      "app": "paraglide",
+      "clientJsGzip": 183962,
+      "scripts": 7,
+      "htmlGzip": 2499,
+      "coldEmptyCacheMs": 49,
+      "coldFilledCacheMs": 53,
+      "warmMedianMs": 3.34,
+      "warmP95Ms": 4.06,
+      "sample": {
+        "k001": "Funktion 1 hält Ihr Team in jedem Projekt synchron",
+        "k171": "3 Dateien in Ordner 171",
+        "k191": "Aktualisiert am 14.03.2026 (Bericht 191)"
+      }
+    },
+    {
+      "app": "lingui",
+      "clientJsGzip": 178248,
+      "scripts": 8,
+      "htmlGzip": 3960,
+      "coldEmptyCacheMs": 77,
+      "coldFilledCacheMs": 53,
+      "warmMedianMs": 3.75,
+      "warmP95Ms": 4.88,
+      "sample": {
+        "k001": "Funktion 1 hält Ihr Team in jedem Projekt synchron",
+        "k171": "3 Dateien in Ordner 171",
+        "k191": "Aktualisiert am 14. März 2026 (Bericht 191)"
+      }
+    }
+  ]
+}

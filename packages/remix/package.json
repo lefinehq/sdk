@@ -1,0 +1,95 @@
+{
+  "name": "@better-i18n/remix",
+  "version": "0.7.0",
+  "description": "Better i18n Remix/Hydrogen integration — CDN-powered i18n",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lefinehq/sdk.git",
+    "directory": "packages/remix"
+  },
+  "bugs": {
+    "url": "https://github.com/better-i18n/better-i18n/issues"
+  },
+  "homepage": "https://github.com/better-i18n/better-i18n/tree/main/packages/remix",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./i18next": {
+      "types": "./dist/i18next.d.ts",
+      "default": "./dist/i18next.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "i18n",
+    "localization",
+    "internationalization",
+    "remix",
+    "hydrogen",
+    "shopify",
+    "react-router",
+    "i18next",
+    "remix-i18next"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@better-i18n/core": "workspace:*",
+    "@floating-ui/react": "^0.27.20"
+  },
+  "peerDependencies": {
+    "i18next": ">=23.0.0",
+    "react": ">=18.0.0",
+    "react-i18next": ">=14.0.0",
+    "react-router": ">=7.0.0",
+    "remix-i18next": ">=7.0.0",
+    "use-intl": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "i18next": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-i18next": {
+      "optional": true
+    },
+    "react-router": {
+      "optional": true
+    },
+    "remix-i18next": {
+      "optional": true
+    },
+    "use-intl": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.3.0",
+    "typescript": "~5.9.2"
+  }
+}

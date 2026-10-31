@@ -1,0 +1,100 @@
+---
+title: Calling APIs
+description: Use installation tokens to call the partner API.
+---
+
+Send the installation token as the Bearer token for partner API endpoints.
+
+## Identity
+
+Use the OAuth access token to check who connected and which Lefine account
+it belongs to:
+
+```bash
+curl https://api.better-i18n.com/api/oauth-client/me \
+  -H "Authorization: Bearer <access_token>"
+```
+
+## Organizations and projects
+
+List organizations the user granted access to:
+
+```bash
+curl https://api.better-i18n.com/api/oauth-client/organizations \
+  -H "Authorization: Bearer bi_oat_d7ab12..." \
+```
+
+List projects in an organization:
+
+```bash
+curl https://api.better-i18n.com/api/oauth-client/organizations/<org_id>/projects \
+  -H "Authorization: Bearer bi_oat_d7ab12..."
+```
+
+Create a CDN-backed project in the granted organization:
+
+```bash
+curl -X POST https://api.better-i18n.com/api/oauth-client/v1/projects \
+  -H "Authorization: Bearer bi_oat_d7ab12..." \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Marketing site", "slug": "marketing-site", "sourceLanguage": "en" }'
+```
+
+Read project details:
+
+```bash
+curl https://api.better-i18n.com/api/oauth-client/v1/projects/<project_id> \
+  -H "Authorization: Bearer bi_oat_d7ab12..."
+```
+
+Add a target language:
+
+```bash
+curl -X POST https://api.better-i18n.com/api/oauth-client/v1/projects/<project_id>/languages \
+  -H "Authorization: Bearer bi_oat_d7ab12..." \
+  -H "Content-Type: application/json" \
+  -d '{ "code": "de" }'
+```
+
+## Translation keys and values
+
+Dedicated REST endpoints for keys, translations, publishing, glossary, and
+Content CMS writes are in active partner rollout. Until they are available in
+your account, use the Lefine MCP tools with the same `bi_oat_` token for
+translation key and value operations. See [MCP integration](/oauth/mcp-integration).
+
+## Scope enforcement
+
+If your token is missing the required scope, you'll get:
+
+```json
+{
+  "error": "missing_scope",
+  "required": "translations:publish"
+}
+```
+
+**Do not retry this.** The user needs to re-authorize with the wider scope. See [scopes](/oauth/scopes) for the full mapping.
+
+## Identity endpoint
+
+`/api/oauth-client/me` accepts **either** the OAuth access token or a `bi_oat_`
+installation token in the `Authorization` header — it doesn't require any
+scope. All other resource endpoints (organizations, projects, keys, etc.)
+require an installation token. Use `/me` right after exchange to confirm the
+connection succeeded before minting an installation token.
+
+## Handling revocation
+
+When a token is revoked, API calls return:
+
+```json
+HTTP/1.1 410 Gone
+{ "error": "grant_revoked" }
+```
+
+Treat this as a first-class state in your UI — show a "Reconnect" prompt, don't retry.
+
+## Next step
+
+See the [scope reference](/oauth/scopes) for what each scope unlocks.

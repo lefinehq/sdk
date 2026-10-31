@@ -1,0 +1,58 @@
+---
+title: Introduction
+description: AI assistant integration for translation management
+icon: BookOpen
+---
+
+Lefine MCP (Model Context Protocol) is the bridge between your AI assistant and your translation workspace. It allows tools like ChatGPT, Claude, Cursor, and Gemini to directly manage your project's i18n lifecycle.
+
+## Two MCP Servers
+
+Lefine provides **two focused MCP servers** to keep tool lists manageable:
+
+| Package | Tools | Purpose |
+|---|---|---|
+| `@better-i18n/mcp` | 11 tools | Translation management (keys, translations, publishing) |
+| `@better-i18n/mcp-content` | 17 tools | Content management (models, entries, fields, localized content) |
+
+Install one or both depending on your workflow.
+
+## Core Features
+
+- **AI-Native Workflow** — Empower your AI to fix missing translations and create content.
+- **Zero Scan Latency** — Uses your `i18n.config.ts` to immediately connect to the cloud.
+- **Efficient Bulk Updates** — Single commands to update hundreds of values in seconds.
+- **Context-Aware** — AI understands your namespaces, models, and project structure.
+
+## Quick Start
+
+<Tabs items={['AI Assistants', 'Coding Agents']}>
+  <Tab value="AI Assistants">
+    Connect **ChatGPT**, **Claude**, or **Gemini** using the remote MCP server URL:
+
+    ```
+    https://mcp.better-i18n.com/mcp
+    ```
+
+    Paste this URL in your assistant's MCP settings and sign in with your Lefine account. No installation needed.
+
+    See the [AI Assistants guide](/mcp/ai-assistants) for step-by-step instructions.
+  </Tab>
+  <Tab value="Coding Agents">
+    Add the server to **Cursor**, **Claude Desktop**, or **Windsurf**:
+    ```bash
+    npx -y @better-i18n/mcp@latest
+    ```
+    See the [Setup Guide](/mcp/getting-started) for API key and environment configuration.
+  </Tab>
+</Tabs>
+
+## Why use MCP?
+
+Instead of manually copying keys and text to the dashboard, you can simply ask:
+> "Translate the new auth namespace to Turkish and German."
+
+The AI assistant will:
+1.  Verify the keys exist.
+2.  Generate accurate translations in context.
+3.  Apply them directly to your project using the [Available Tools](/mcp/tool-reference).

@@ -1,0 +1,7 @@
+{
+  "welcome": "Willkommen, {name}!",
+  "nav": {
+    "save": "Speichern",
+    "files": "{ file_count, plural, one {Du hast {file_count} Datei.} other {Du hast {file_count} Dateien.} }"
+  }
+}

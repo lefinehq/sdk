@@ -1,0 +1,165 @@
+---
+title: Introduction
+description: CLI for managing translation keys, syncing translations, and publishing to CDN
+icon: BookOpen
+---
+
+Lefine CLI is a full-featured command-line tool for managing your localization workflow. Authenticate once, then manage translation keys, set translations, publish to CDN, and audit your i18n health — all from the terminal.
+
+When MCP tools aren't available (CI/CD pipelines, headless environments, AI agents without MCP), the CLI provides the same capabilities with `--json` output for machine consumption.
+
+## Quick Start
+
+```bash
+# Install
+npm install -g @better-i18n/cli
+
+# Authenticate (opens browser)
+better-i18n login
+
+# List your projects
+better-i18n projects
+
+# List keys in a project
+better-i18n keys list -p acme/dashboard
+
+# Create keys
+better-i18n keys create -p acme/dashboard --key "auth.title" --value "Login"
+
+# Publish to CDN
+better-i18n publish -p acme/dashboard
+```
+
+## Authentication
+
+The CLI uses the same API keys as the MCP server. Three ways to authenticate:
+
+```bash
+# Option 1: Browser login (recommended for developers)
+better-i18n login
+
+# Option 2: API key flag (for CI/agents)
+better-i18n login --api-key bi-your-key
+
+# Option 3: Environment variable (for CI/CD)
+export BETTER_I18N_API_KEY=bi-your-key
+```
+
+Auth resolution priority: `--api-key` flag → `BETTER_I18N_API_KEY` env → `~/.better-i18n/auth.json` (from login).
+
+[View full authentication docs →](/cli/auth)
+
+---
+
+## Commands
+
+### Auth
+
+| Command | Description |
+|---------|-------------|
+| [`login`](/cli/auth) | Authenticate via browser or API key |
+| [`logout`](/cli/auth) | Remove stored credentials |
+| [`whoami`](/cli/auth) | Show current authenticated user |
+
+### Translation Management
+
+| Command | Description |
+|---------|-------------|
+| [`projects`](/cli/projects) | List all projects |
+| [`project`](/cli/projects) | Show project details (languages, namespaces, coverage) |
+| [`keys list`](/cli/keys) | Browse and search translation keys |
+| [`keys create`](/cli/keys) | Create keys (flags or stdin JSON) |
+| [`keys delete`](/cli/keys) | Delete keys by UUID |
+| [`translations`](/cli/translations) | Get translations with full text content |
+| [`translate`](/cli/translate) | Set translations for existing keys |
+
+### Publishing
+
+| Command | Description |
+|---------|-------------|
+| [`publish`](/cli/publish) | Publish pending changes to CDN |
+| [`publish:status`](/cli/publish) | Show pending changes before publishing |
+| [`syncs list`](/cli/syncs) | View sync/publish job history |
+| [`syncs get`](/cli/syncs) | Get sync job details |
+| [`syncs cancel`](/cli/syncs) | Cancel a pending sync job |
+
+### Languages
+
+| Command | Description |
+|---------|-------------|
+| [`languages add`](/cli/languages) | Add target languages to project |
+| [`languages edit`](/cli/languages) | Change language status (active/draft/archived) |
+
+### Code Analysis
+
+| Command | Description |
+|---------|-------------|
+| [`doctor`](/cli/doctor) | Full i18n health report (score 0–100) |
+| [`scan`](/cli/scan) | Find hardcoded strings not wrapped in `t()` |
+| [`check`](/cli/check) | Interactive missing/unused key checker |
+| [`sync`](/cli/sync) | Compare local keys with remote CDN |
+| [`pull`](/cli/pull) | Download translations for offline fallback |
+| [`content:types`](/cli/content-types) | Generate TypeScript types from content models |
+
+---
+
+## Agent / CI Usage
+
+Every command supports `--json` for machine-readable output and `--yes` to skip confirmations. Pipe JSON via stdin for bulk operations:
+
+```bash
+# Agent creates keys
+echo '[{"n":"auth.title","v":"Login"},{"n":"auth.subtitle","v":"Welcome"}]' \
+  | better-i18n keys create -p acme/dashboard --json --yes
+
+# Agent sets translations
+echo '[{"id":"<uuid>","t":{"tr":"Giriş","de":"Anmelden"}}]' \
+  | better-i18n translate -p acme/dashboard --json --yes
+
+# Agent publishes
+better-i18n publish -p acme/dashboard --json --yes
+```
+
+JSON output follows a consistent contract:
+
+```json
+// Success
+{"ok": true, "data": { ... }}
+
+// Error
+{"ok": false, "error": "message", "code": "AUTH_FAILED"}
+```
+
+---
+
+## Configuration
+
+The CLI reads project settings from `i18n.config.ts` (auto-detected). You can override with `-p org/project` on any command.
+
+```typescript
+// i18n.config.ts
+export default {
+  projectId: "acme/dashboard",
+  defaultLocale: "en",
+};
+```
+
+Credentials are stored in `~/.better-i18n/auth.json` after running `better-i18n login`.
+
+## Installation
+
+```bash
+# npm
+npm install -g @better-i18n/cli
+
+# npx (no install)
+npx @better-i18n/cli doctor
+
+# pnpm
+pnpm add -g @better-i18n/cli
+
+# bun
+bun add -g @better-i18n/cli
+```
+
+Requires Node.js 18+.

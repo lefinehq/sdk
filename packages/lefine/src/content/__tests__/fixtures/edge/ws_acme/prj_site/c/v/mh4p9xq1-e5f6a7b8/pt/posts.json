@@ -1,0 +1,44 @@
+{
+  "collection": "posts",
+  "locale": "pt",
+  "entries": [
+    {
+      "id": "ent_hello",
+      "slug": "hello",
+      "publishedAt": "2026-10-24T10:00:00.000Z",
+      "data": {
+        "title": "Olá",
+        "body": {
+          "root": {
+            "type": "root",
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "children": [
+              {
+                "type": "paragraph",
+                "direction": "ltr",
+                "format": "",
+                "indent": 0,
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Corpo em português",
+                    "format": 0,
+                    "detail": 0,
+                    "mode": "normal",
+                    "style": ""
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "cover": "med_cover1",
+        "tags": ["news"],
+        "sections": [{ "id": "row1", "blockType": "hero", "heading": "Olá" }]
+      },
+      "fallbacks": []
+    }
+  ]
+}

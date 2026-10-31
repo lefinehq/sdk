@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "../cli/src",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "types": ["node"]
+  },
+  "include": ["../cli/src/lefine.ts"],
+  "exclude": ["node_modules", "dist", "../cli/src/**/*.test.ts", "../cli/src/**/__tests__/**"]
+}

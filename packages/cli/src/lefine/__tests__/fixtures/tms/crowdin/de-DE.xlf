@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Crowdin XLIFF 1.2. Shape ADAPTED from https://support.crowdin.com/file-formats/xliff/ (sample file + Plurals section). Values are invented. -->
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file id="19704" original="/locales/en/common.json" source-language="en" target-language="de-DE" datatype="plaintext">
+    <body>
+      <trans-unit id="874396">
+        <source>Welcome, {name}!</source>
+        <target state="final">Willkommen, {name}!</target>
+        <note>Greeting on the dashboard</note>
+      </trans-unit>
+      <trans-unit id="874397">
+        <source>Save</source>
+        <target state="translated">Speichern</target>
+      </trans-unit>
+      <trans-unit id="874398">
+        <source>Cancel</source>
+        <target state="needs-review-translation" state-qualifier="x-leveraged-ai">Abbrechen</target>
+      </trans-unit>
+      <trans-unit id="874399" approved="yes">
+        <source>Delete</source>
+        <target>Löschen</target>
+      </trans-unit>
+      <trans-unit id="874400">
+        <source>Not translated yet</source>
+        <target state="needs-translation"></target>
+      </trans-unit>
+      <group restype="x-gettext-plurals">
+        <note>Context: items.count [one] [other]</note>
+        <trans-unit id="14343743[0]">
+          <source>{count} item</source>
+          <target xml:lang="de-DE" state="translated">{count} Artikel</target>
+        </trans-unit>
+        <trans-unit id="14343743[1]">
+          <source>{count} items</source>
+          <target xml:lang="de-DE" state="translated">{count} Artikel</target>
+        </trans-unit>
+      </group>
+    </body>
+  </file>
+</xliff>

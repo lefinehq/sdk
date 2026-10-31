@@ -1,0 +1,1327 @@
+import { TtlCache, buildCacheKey } from "./cache.js";
+import { getProjectBaseUrl, normalizeConfig } from "./config.js";
+import {
+  VERSIONED_PATH_SEGMENT,
+  VERSION_PATTERN,
+  localeSnapshotVersion,
+  resolveTranslationUrl,
+} from "./versioned-url.js";
+import { createLogger } from "./logger.js";
+import { extractLanguages } from "./manifest.js";
+import {
+  IntegrityError,
+  hasIntegrityClaims,
+  isSchema2,
+  verifyLocaleBytes,
+} from "./integrity.js";
+import type {
+  CacheStatus,
+  CacheUpdateEvent,
+  CacheUpdateListener,
+  ChangesFile,
+  ChangesSinceResult,
+  I18nCore,
+  I18nCoreConfig,
+  LanguageOption,
+  ManifestResponse,
+  Messages,
+  MessagesUpdateEvent,
+  MessagesUpdateListener,
+  NormalizedConfig,
+  TranslationStorage,
+} from "./types.js";
+import { normalizeLocale } from "./utils/locale.js";
+
+const STORAGE_PREFIX = "@better-i18n";
+
+// Global caches (shared across instances)
+const manifestCache = new TtlCache<ManifestResponse>();
+const messagesCache = new TtlCache<Messages>();
+// ETag cache — keyed same as messagesCache, stores last ETag for If-None-Match
+const messagesETagCache = new TtlCache<string>();
+
+// ─── Manifest-driven revalidation ───────────────────────────────────
+//
+// Cache keys include the manifest-reported version for each locale
+// (`files[locale].lastModified` or a manifest-level fallback). When the CDN
+// publishes new content, the manifest's version moves, every client's cache
+// key shifts with it, and the next fetch goes to origin. No stale hits.
+//
+// `revalidate(locale)` flips the freshness decision from "TTL elapsed?" to
+// "has the CDN advertised a newer version?". The manifest payload is small
+// (~5KB) and ETag-aware, so the check is effectively free on 304.
+//
+// No CF/Worker coupling — everything is RFC 7234 HTTP semantics.
+
+// Locales currently being revalidated — de-duplicates concurrent callers.
+const inFlightRevalidations = new Set<string>();
+
+// Manifest requests currently in flight, keyed the same way the cache is.
+// Concurrent callers share one round-trip instead of opening one each.
+const inFlightManifests = new Map<string, Promise<ManifestResponse>>();
+
+// Last manifest version each locale's messages were built from, keyed
+// `{cacheKey}|{locale}`. `revalidate` compares against this instead of
+// re-reading the manifest it is about to replace.
+const loadedMessageVersions = new Map<string, string>();
+
+// Global subscriber set (module-scoped: all cores/instances share the bus).
+// Listeners register themselves through createI18nCore(...).onMessagesUpdate.
+const messagesListeners = new Set<MessagesUpdateListener>();
+
+const notifyMessagesUpdate = (event: MessagesUpdateEvent): void => {
+  for (const listener of messagesListeners) {
+    try {
+      listener(event);
+    } catch {
+      // Listener exceptions must not break the revalidation path.
+    }
+  }
+};
+
+// ─── Schema-2 cache state (Lefine manifests) ────────────────────────
+//
+// A manifest with `schema: 2` carries `revision`, per-locale `version`,
+// `sha256` and `keyCount`. Everything below is inert for a Better i18n
+// (schema-1) manifest, which keeps the `lastModified` behaviour above.
+
+interface ManifestRecord {
+  manifest: ManifestResponse;
+  etag: string | null;
+}
+
+// Last manifest accepted per project, never expired by TTL. Gives the
+// conditional request its `If-None-Match`, the revision-regression check its
+// baseline, and the stale-while-error path something verified to serve.
+const lastManifests = new Map<string, ManifestRecord>();
+
+// Last verified messages per `{cacheKey}|{locale}`. A schema-2 snapshot URL is
+// immutable, so a copy for the same derived version never needs refetching;
+// and when a newer one fails verification this is what keeps being served.
+const lastVerified = new Map<
+  string,
+  { version: string; revision: number | undefined; messages: Messages }
+>();
+
+// Manifest revision each locale's messages were loaded at.
+const loadedRevisions = new Map<string, number | undefined>();
+
+const cacheStatuses = new Map<string, CacheStatus>();
+
+const updateListeners = new Set<CacheUpdateListener>();
+
+const notifyUpdate = (event: CacheUpdateEvent): void => {
+  for (const listener of updateListeners) {
+    try {
+      listener(event);
+    } catch {
+      // Listener exceptions must not break the revalidation path.
+    }
+  }
+};
+
+const statusFor = (key: string): CacheStatus => {
+  let status = cacheStatuses.get(key);
+  if (!status) {
+    status = {
+      stale: false,
+      lastCheckedAt: null,
+      revision: null,
+      integrityFailures: 0,
+      lastError: null,
+      storageError: null,
+    };
+    cacheStatuses.set(key, status);
+  }
+  return status;
+};
+
+const markChecked = (key: string, manifest: ManifestResponse): void => {
+  const status = statusFor(key);
+  status.stale = false;
+  status.lastError = null;
+  status.lastCheckedAt = Date.now();
+  status.revision = typeof manifest.revision === "number" ? manifest.revision : null;
+};
+
+const markStale = (key: string, error: unknown): void => {
+  const status = statusFor(key);
+  status.stale = true;
+  status.lastError = error instanceof Error ? error.message : String(error);
+  if (error instanceof IntegrityError) status.integrityFailures += 1;
+};
+
+const markStorageError = (key: string, error: unknown | null): void => {
+  statusFor(key).storageError =
+    error === null ? null : error instanceof Error ? error.message : String(error);
+};
+
+const markFresh = (key: string): void => {
+  const status = statusFor(key);
+  status.stale = false;
+  status.lastError = null;
+};
+
+/** A lower revision is never newer: rollback is a publish with a higher revision. */
+const isRevisionRegression = (
+  previous: ManifestResponse,
+  next: ManifestResponse,
+): boolean =>
+  typeof previous.revision === "number" &&
+  typeof next.revision === "number" &&
+  next.revision < previous.revision;
+
+/**
+ * Extract the freshness version for a locale from the manifest.
+ *
+ * Precedence:
+ *   1. `files[locale].lastModified` (v2, per-locale precision)
+ *   2. `manifest.updatedAt`         (manifest-wide fallback)
+ *   3. `"unversioned"`              (no manifest at all — keeps BC)
+ *
+ * The returned string is opaque and only compared with `===`. It never needs
+ * to parse into a timestamp.
+ */
+const deriveLocaleVersion = (
+  manifest: ManifestResponse | null | undefined,
+  locale: string,
+): string => {
+  // Schema 2: the file's own `version` (+ `sha256`) names its bytes. A locale
+  // that did not change keeps both while `revision` and `lastModified` of
+  // other locales move, so it is never refetched. `lastModified` is not used.
+  if (isSchema2(manifest)) {
+    const entry = manifest?.files?.[locale];
+    if (entry?.version) {
+      return entry.sha256 ? `${entry.version}:${entry.sha256}` : entry.version;
+    }
+  }
+  const perLocale = manifest?.files?.[locale]?.lastModified;
+  if (perLocale) return perLocale;
+  if (manifest?.updatedAt) return manifest.updatedAt;
+  return "unversioned";
+};
+
+// ─── Storage helpers ────────────────────────────────────────────────
+
+const buildManifestStorageKey = (project: string): string =>
+  `${STORAGE_PREFIX}:manifest:${project}`;
+
+// The manifest's ETag lives beside it, not inside it, so the stored manifest
+// keeps the shape older SDK versions read.
+const buildManifestMetaStorageKey = (project: string): string =>
+  `${STORAGE_PREFIX}:manifest-meta:${project}`;
+
+const buildMessagesStorageKey = (project: string, locale: string): string =>
+  `${STORAGE_PREFIX}:messages:${project}:${locale}`;
+
+const readFromStorage = async <T>(
+  storage: TranslationStorage | undefined,
+  key: string
+): Promise<T | null> => {
+  if (!storage) return null;
+  try {
+    const raw = await storage.get(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+};
+
+// `report` is how a write becomes visible (`getStatus().storageError`): the
+// error on failure, `null` on success.
+// The write is still best-effort: it never fails the load.
+const writeToStorage = async (
+  storage: TranslationStorage | undefined,
+  key: string,
+  data: unknown,
+  report?: (error: unknown | null) => void
+): Promise<void> => {
+  if (!storage) return;
+  try {
+    await storage.set(key, JSON.stringify(data));
+    report?.(null);
+  } catch (err) {
+    // Storage full or unavailable
+    report?.(err);
+  }
+};
+
+// ─── Fetch helpers ──────────────────────────────────────────────────
+
+/**
+ * Fetch with AbortController-based timeout
+ */
+const fetchWithTimeout = async (
+  fetchFn: typeof fetch,
+  url: string,
+  init: RequestInit | undefined,
+  timeoutMs: number
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetchFn(url, {
+      ...init,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
+ * Fetch with retry logic
+ */
+const fetchWithRetry = async (
+  fetchFn: typeof fetch,
+  url: string,
+  init: RequestInit | undefined,
+  timeoutMs: number,
+  retryCount: number
+): Promise<Response> => {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retryCount; attempt++) {
+    try {
+      return await fetchWithTimeout(fetchFn, url, init, timeoutMs);
+    } catch (err) {
+      lastError = err;
+      // Don't retry on the last attempt
+      if (attempt < retryCount) {
+        // Simple exponential backoff: 200ms, 400ms, ...
+        await new Promise((resolve) =>
+          setTimeout(resolve, 200 * (attempt + 1))
+        );
+      }
+    }
+  }
+
+  throw lastError;
+};
+
+// ─── Resolve staticData helper ──────────────────────────────────────
+
+const resolveStaticData = async (
+  staticData: I18nCoreConfig["staticData"]
+): Promise<Record<string, Messages> | null> => {
+  if (!staticData) return null;
+  if (typeof staticData === "function") {
+    try {
+      return await staticData();
+    } catch {
+      return null;
+    }
+  }
+  return staticData;
+};
+
+// ─── Manifest fetching with fallback ────────────────────────────────
+
+/**
+ * Fetch manifest from CDN (raw, no cache)
+ */
+const fetchManifestFromCdn = async (
+  config: NormalizedConfig,
+  fetchFn: typeof fetch,
+  previous?: ManifestRecord
+): Promise<ManifestRecord & { notModified: boolean }> => {
+  const logger = createLogger(config, "manifest");
+  const url = `${getProjectBaseUrl(config)}/manifest.json`;
+
+  logger.debug("fetching", url);
+
+  const headers: Record<string, string> = {
+    "Cache-Control": "no-store",
+    // Accept-Encoding requests compression: 477KB → 26KB for manifest (94% reduction).
+    "Accept-Encoding": "gzip, br",
+  };
+  // Conditional request, schema 2 only: the edge sends an ETag for the
+  // manifest and answers 304 when nothing was published. A schema-1 manifest
+  // is requested exactly as before.
+  if (previous?.etag && isSchema2(previous.manifest)) {
+    headers["If-None-Match"] = previous.etag;
+  }
+
+  const response = await fetchWithRetry(
+    fetchFn,
+    url,
+    // cache: "no-store" bypasses browser disk cache (fetch API option).
+    { headers, cache: "no-store" },
+    config.fetchTimeout,
+    config.retryCount
+  );
+
+  if (response.status === 304 && previous) {
+    logger.debug("304 Not Modified");
+    return { ...previous, notModified: true };
+  }
+
+  if (!response.ok) {
+    const message = `Manifest fetch failed (${response.status})`;
+    logger.error(message);
+    throw new Error(`[better-i18n] ${message}`);
+  }
+
+  const data = (await response.json()) as ManifestResponse;
+
+  if (!Array.isArray(data.languages)) {
+    throw new Error("[better-i18n] Manifest payload missing languages array");
+  }
+
+  logger.debug("fetched", { languages: data.languages.length });
+  return {
+    manifest: data,
+    etag: response.headers?.get?.("etag") ?? null,
+    notModified: false,
+  };
+};
+
+/**
+ * Get manifest with full fallback chain:
+ * 1. Memory cache (TtlCache)
+ * 2. CDN fetch (with timeout + retry)
+ * 3. Persistent storage
+ * 4. Throw (last resort)
+ */
+const getManifestWithCache = async (
+  config: NormalizedConfig,
+  fetchFn: typeof fetch,
+  forceRefresh = false
+): Promise<ManifestResponse> => {
+  const cacheKey = buildCacheKey(config.cdnBaseUrl, config.project);
+
+  // 1. Memory cache
+  if (!forceRefresh) {
+    const cached = manifestCache.get(cacheKey);
+    if (cached) return cached;
+
+    // 1b. Someone else is already asking for exactly this manifest. Join them.
+    //
+    // Without this, callers that start together each miss the empty cache and
+    // each open their own request: on a fresh page load the provider's
+    // `getLanguages()` and its revalidation both fire in the same tick, and
+    // the manifest was fetched twice for one page. The cache only helps
+    // callers that arrive after the first response, which is the one case
+    // that was never the problem.
+    const pending = inFlightManifests.get(cacheKey);
+    if (pending) return pending;
+  }
+
+  const request = fetchManifestWithFallback(config, fetchFn, cacheKey);
+  // A forced refresh deliberately bypasses the cache, but it should still be
+  // shareable — two revalidations racing each other want the same answer.
+  inFlightManifests.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    inFlightManifests.delete(cacheKey);
+  }
+};
+
+/**
+ * Manifest fetch with the storage fallback chain. Separated from
+ * {@link getManifestWithCache} so the in-flight map wraps exactly one
+ * promise per cache key.
+ */
+const fetchManifestWithFallback = async (
+  config: NormalizedConfig,
+  fetchFn: typeof fetch,
+  cacheKey: string
+): Promise<ManifestResponse> => {
+  const logger = createLogger(config, "manifest");
+  const storageKey = buildManifestStorageKey(config.project);
+  let previous = lastManifests.get(cacheKey);
+
+  // Cold start: no manifest in memory, but a schema-2 one with its ETag on
+  // disk. Seeding `previous` lets the very first request be conditional (a
+  // 304 costs no body) and gives the revision check a baseline.
+  if (!previous && config.storage) {
+    const storedManifest = await readFromStorage<ManifestResponse>(config.storage, storageKey);
+    if (storedManifest && Array.isArray(storedManifest.languages) && isSchema2(storedManifest)) {
+      const meta = await readFromStorage<{ etag?: string | null }>(
+        config.storage,
+        buildManifestMetaStorageKey(config.project),
+      );
+      previous = { manifest: storedManifest, etag: meta?.etag ?? null };
+    }
+  }
+
+  // 2. CDN fetch
+  try {
+    const fetched = await fetchManifestFromCdn(config, fetchFn, previous);
+
+    // Same bytes as before (304): keep the record, restart the TTL.
+    if (fetched.notModified) {
+      lastManifests.set(cacheKey, { manifest: fetched.manifest, etag: fetched.etag });
+      manifestCache.set(cacheKey, fetched.manifest, config.manifestCacheTtlMs);
+      markChecked(cacheKey, fetched.manifest);
+      return fetched.manifest;
+    }
+
+    // A lower revision is never newer. Keep what is verified and say so.
+    if (previous && isRevisionRegression(previous.manifest, fetched.manifest)) {
+      logger.warn(
+        `ignoring manifest revision ${fetched.manifest.revision} (older than ${previous.manifest.revision})`,
+      );
+      manifestCache.set(cacheKey, previous.manifest, config.manifestCacheTtlMs);
+      markChecked(cacheKey, previous.manifest);
+      return previous.manifest;
+    }
+
+    const manifest = fetched.manifest;
+    lastManifests.set(cacheKey, { manifest, etag: fetched.etag });
+    manifestCache.set(cacheKey, manifest, config.manifestCacheTtlMs);
+    markChecked(cacheKey, manifest);
+
+    // Write-through to storage (fire-and-forget)
+    const onStorageError = (err: unknown) => markStorageError(cacheKey, err);
+    writeToStorage(config.storage, storageKey, manifest, onStorageError);
+    if (isSchema2(manifest)) {
+      writeToStorage(
+        config.storage,
+        buildManifestMetaStorageKey(config.project),
+        { etag: fetched.etag },
+        onStorageError,
+      );
+    }
+
+    return manifest;
+  } catch (cdnError) {
+    logger.warn("CDN fetch failed, trying fallback sources", cdnError);
+    markStale(cacheKey, cdnError);
+
+    // 2b. Schema 2: the last manifest this process verified is still the
+    // truth until the CDN says otherwise (contract 2b, SDK cache rule 5).
+    if (previous && isSchema2(previous.manifest)) {
+      logger.info("serving last known manifest from memory (stale)");
+      manifestCache.set(cacheKey, previous.manifest, config.manifestCacheTtlMs);
+      return previous.manifest;
+    }
+
+    // 3. Persistent storage
+    const stored = await readFromStorage<ManifestResponse>(
+      config.storage,
+      storageKey
+    );
+    if (stored && Array.isArray(stored.languages)) {
+      logger.info("serving manifest from persistent storage (stale)");
+      manifestCache.set(cacheKey, stored, config.manifestCacheTtlMs);
+      return stored;
+    }
+
+    // 4. No fallback available
+    throw cdnError;
+  }
+};
+
+// ─── Messages fetching with fallback ────────────────────────────────
+
+type MessagesFetchResult =
+  | { notModified: true }
+  | { notModified: false; messages: Messages; etag: string | null };
+
+/**
+ * Fetch messages from CDN (raw, no cache).
+ * Passes If-None-Match when an ETag is known — returns { notModified: true } on 304.
+ */
+const fetchMessagesFromCdn = async (
+  config: NormalizedConfig,
+  locale: string,
+  fetchFn: typeof fetch,
+  ifNoneMatch?: string,
+  manifest?: ManifestResponse | null
+): Promise<MessagesFetchResult> => {
+  const logger = createLogger(config, "messages");
+  // Versioned snapshot when the manifest advertises one for this locale,
+  // legacy path otherwise (platform #115; see versioned-url.ts).
+  const { url, versioned } = resolveTranslationUrl(getProjectBaseUrl(config), manifest, locale, "translations");
+
+  // Schema 2 + snapshot URL: the manifest promised bytes (sha256) and a text
+  // count (keyCount). Check them before the body can replace anything.
+  const schema2Snapshot = isSchema2(manifest) && versioned;
+  const entry = manifest?.files?.[locale];
+  const claims = schema2Snapshot && hasIntegrityClaims(entry) ? entry : null;
+
+  logger.debug("fetching", url);
+
+  const headers: Record<string, string> = {
+    "Cache-Control": "no-store",
+    // Request compression: single-file translations.json is often 200-500KB uncompressed
+    "Accept-Encoding": "gzip, br",
+  };
+  if (ifNoneMatch) {
+    headers["If-None-Match"] = ifNoneMatch;
+  }
+
+  const request = () =>
+    fetchWithRetry(
+      fetchFn,
+      url,
+      // cache: "no-store" bypasses browser disk cache (fetch API option).
+      // The header alone is not enough — browser ignores it for disk cache reads.
+      { headers, cache: "no-store" },
+      config.fetchTimeout,
+      config.retryCount
+    );
+  let response = await request();
+
+  // The manifest names a snapshot the edge cannot serve yet: the manifest got
+  // ahead of the files. Wait once and ask again; then the caller keeps the
+  // last verified copy. A missing snapshot is never an empty locale.
+  if (response.status === 404 && schema2Snapshot) {
+    const delay = config.snapshotRetryDelayMs ?? 1000;
+    logger.warn(`snapshot 404 for "${locale}", retrying once in ${delay}ms`);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    response = await request();
+  }
+
+  // 304 Not Modified — cached content is still fresh
+  if (response.status === 304) {
+    logger.debug("304 Not Modified", { locale });
+    return { notModified: true };
+  }
+
+  if (!response.ok) {
+    const message = `Messages fetch failed for locale "${locale}" (${response.status})`;
+    logger.error(message);
+    throw new Error(`[better-i18n] ${message}`);
+  }
+
+  const data = claims
+    ? ((await verifyLocaleBytes(
+        await response.arrayBuffer(),
+        claims,
+        locale,
+        () => logger.warn("crypto.subtle unavailable: sha256 not checked, keyCount still is"),
+      )) as Messages)
+    : ((await response.json()) as Messages);
+  const etag = response.headers?.get?.("etag") ?? null;
+
+  // CDN always returns HTTP 200 — even for non-existent locales it returns {}
+  // or { fallback: true }. Treat empty/fallback responses as failures so the
+  // fallback chain (storage → staticData) can provide real translations.
+  const isFallbackMarker = "fallback" in data && Object.keys(data).length === 1;
+  const isEmpty = !data || Object.keys(data).length === 0;
+
+  if (isEmpty || isFallbackMarker) {
+    const reason = isEmpty ? "empty" : "fallback marker";
+    logger.warn(`CDN returned ${reason} response for locale "${locale}" — locale may not exist`);
+    throw new Error(`[better-i18n] No translations available for locale "${locale}" (${reason})`);
+  }
+
+  logger.debug("fetched", { locale, keys: Object.keys(data).length });
+
+  return { notModified: false, messages: data, etag };
+};
+
+/**
+ * Fetch a single namespace file from its absolute URL.
+ * No ETag support — v2 namespace files rely on TtlCache + CDN max-age.
+ */
+const fetchNamespaceFile = async (
+  config: NormalizedConfig,
+  namespace: string,
+  url: string,
+  fetchFn: typeof fetch
+): Promise<Record<string, unknown>> => {
+  const logger = createLogger(config, "messages");
+  logger.debug("fetching namespace", { namespace, url });
+
+  const response = await fetchWithRetry(
+    fetchFn,
+    url,
+    // Per-namespace files are typically 10-50KB — compression still worthwhile
+    { headers: { "Cache-Control": "no-store", "Accept-Encoding": "gzip, br" }, cache: "no-store" },
+    config.fetchTimeout,
+    config.retryCount
+  );
+
+  if (!response.ok) {
+    const message = `Namespace fetch failed for "${namespace}" (${response.status})`;
+    logger.error(message);
+    throw new Error(`[better-i18n] ${message}`);
+  }
+
+  const data = (await response.json()) as Record<string, unknown>;
+  logger.debug("fetched namespace", { namespace, keys: Object.keys(data).length });
+  return data;
+};
+
+/**
+ * Fetch multiple namespaces in a single HTTP request via CDN batch endpoint.
+ * Like tRPC batching: N namespace requests → 1 HTTP round-trip.
+ *
+ * URL: `/{locale}/batch.json?ns=common,nav,hero`
+ * Response: `{ "common": {...}, "nav": {...}, "hero": {...} }`
+ *
+ * Returns null if the batch request fails (caller falls back to individual fetches).
+ */
+const fetchBatchNamespaces = async (
+  config: NormalizedConfig,
+  locale: string,
+  namespaces: string[],
+  fetchFn: typeof fetch
+): Promise<Messages | null> => {
+  const logger = createLogger(config, "messages");
+  const sorted = [...namespaces].sort();
+  const url = `${getProjectBaseUrl(config)}/${locale}/batch.json?ns=${sorted.join(",")}`;
+
+  logger.debug("batch fetching namespaces", { locale, count: sorted.length });
+
+  try {
+    const response = await fetchWithRetry(
+      fetchFn,
+      url,
+      {
+        headers: { "Cache-Control": "no-store", "Accept-Encoding": "gzip, br" },
+        cache: "no-store",
+      },
+      config.fetchTimeout,
+      config.retryCount
+    );
+
+    if (!response.ok) {
+      logger.debug("batch endpoint returned error", { status: response.status });
+      return null;
+    }
+
+    const data = (await response.json()) as Messages;
+
+    // Validate: batch response must contain EVERY requested namespace.
+    // The batch endpoint can return a *partial* set — e.g. when the combined
+    // payload is large it may be truncated, dropping the alphabetically-later
+    // namespaces (`sorted` is sorted, so a big namespace like "marketing" is
+    // exactly what falls off the end). Accepting a partial set silently ships
+    // pages missing whole namespaces (rendered as fallback text like "Title").
+    // On any shortfall, return null so the caller falls back to individual
+    // per-namespace fetches — one request each, with no aggregate size cap.
+    // `sorted` only contains namespaces the manifest declares available, so a
+    // missing key is a genuine shortfall, never a non-existent namespace.
+    const returnedKeys = new Set(Object.keys(data));
+    const missing = sorted.filter((ns) => !returnedKeys.has(ns));
+    if (returnedKeys.size === 0 || missing.length > 0) {
+      logger.debug("batch response incomplete, falling back to individual fetches", {
+        requested: sorted.length,
+        returned: returnedKeys.size,
+        missing,
+      });
+      return null;
+    }
+
+    logger.debug("batch fetched", {
+      locale,
+      requested: sorted.length,
+      returned: returnedKeys.size,
+    });
+
+    return data;
+  } catch (err) {
+    // Batch failed — not critical, individual fetches will handle it
+    logger.debug("batch fetch failed, falling back", err);
+    return null;
+  }
+};
+
+/**
+ * Fetch namespace files for a locale in parallel and merge into Messages.
+ * URLs are constructed deterministically: `{baseUrl}/{locale}/{ns}.json`.
+ * Throws if any namespace fetch fails — partial results are not returned.
+ */
+const fetchNamespacedMessages = async (
+  config: NormalizedConfig,
+  locale: string,
+  namespaces: string[],
+  fetchFn: typeof fetch,
+  manifest?: ManifestResponse | null
+): Promise<MessagesFetchResult> => {
+  const logger = createLogger(config, "messages");
+  const baseUrl = getProjectBaseUrl(config);
+
+  logger.debug("fetching namespaced messages", {
+    locale,
+    count: namespaces.length,
+    namespaces,
+  });
+
+  // Fetch all namespace files in parallel — fail fast on any error
+  const results = await Promise.all(
+    namespaces.map((ns) => {
+      const { url } = resolveTranslationUrl(baseUrl, manifest, locale, ns);
+      return fetchNamespaceFile(config, ns, url, fetchFn).then(
+        (data) => [ns, data] as const
+      );
+    })
+  );
+
+  // Merge into Messages: { namespace1: {...}, namespace2: {...} }
+  const messages: Messages = {};
+  for (const [namespace, data] of results) {
+    messages[namespace] = data;
+  }
+
+  logger.debug("merged namespaced messages", {
+    locale,
+    namespaces: Object.keys(messages),
+    totalKeys: Object.values(messages).reduce((sum, ns) => sum + Object.keys(ns).length, 0),
+  });
+
+  return { notModified: false, messages, etag: null };
+};
+
+/**
+ * Force a freshness check for `locale` against the CDN.
+ *
+ * Procedure:
+ *   1. Snapshot the previously-known version (from in-memory manifest cache).
+ *   2. Force-refresh the manifest (ETag-aware — typically 304 Not Modified).
+ *   3. If `deriveLocaleVersion()` changed, fetch fresh messages and notify
+ *      subscribers. If unchanged, exit early — zero additional bandwidth.
+ *
+ * De-duplicated per locale: concurrent callers collapse into one round-trip.
+ *
+ * This is the primitive React providers call on `visibilitychange`, `focus`,
+ * and optional polling intervals. It is also safe to call manually after a
+ * user action that is expected to change published content.
+ */
+const revalidateMessages = async (
+  config: NormalizedConfig,
+  locale: string,
+  fetchFn: typeof fetch,
+  requestedNamespaces: string[] | undefined,
+): Promise<void> => {
+  const safeLng = normalizeLocale(locale);
+  if (inFlightRevalidations.has(safeLng)) return;
+  inFlightRevalidations.add(safeLng);
+
+  const logger = createLogger(config, "messages");
+
+  try {
+    // Before-version: the version the messages on screen were actually built
+    // from, recorded by `getMessagesWithFallback`. Reading the manifest again
+    // to discover it was a wasted round-trip — and a misleading one, since the
+    // cached manifest could already have moved past what the messages hold.
+    const baseCacheKey = `${buildCacheKey(config.cdnBaseUrl, config.project)}|${safeLng}`;
+    const oldVersion = loadedMessageVersions.get(baseCacheKey);
+    const oldRevision = loadedRevisions.get(baseCacheKey);
+
+    // Force a fresh manifest — this is the only real network call, and a 304
+    // when nothing changed. Platform-side cache invalidation (CF purge on
+    // publish, or any equivalent for non-CF CDNs) is what makes the CDN serve
+    // a new version here.
+    const freshManifest = await getManifestWithCache(config, fetchFn, true).catch(() => null);
+    const newVersion = deriveLocaleVersion(freshManifest, safeLng);
+
+    // Nothing has been loaded for this locale yet, so there is no "stale copy"
+    // to replace. Fetching messages here would race the initial load.
+    if (oldVersion === undefined) {
+      logger.debug(`revalidate: no loaded messages for "${safeLng}" yet`);
+      return;
+    }
+
+    // Schema 2: same revision means nothing was published. Stop here.
+    if (
+      isSchema2(freshManifest) &&
+      oldRevision !== undefined &&
+      freshManifest?.revision === oldRevision
+    ) {
+      logger.debug(`revalidate: same revision ${oldRevision} for "${safeLng}"`);
+      return;
+    }
+
+    if (oldVersion === newVersion) {
+      logger.debug(`revalidate: no version change for "${safeLng}" (${newVersion})`);
+      // A newer revision that left this locale's bytes alone: remember it so
+      // the next check can stop at the revision.
+      if (isSchema2(freshManifest)) loadedRevisions.set(baseCacheKey, freshManifest?.revision);
+      return;
+    }
+
+    logger.info(`revalidate: version changed for "${safeLng}": ${oldVersion} → ${newVersion}`);
+
+    // Fetch the new payload. `getMessagesWithFallback` will populate the
+    // version-aware cache key derived from the fresh manifest.
+    const messages = await getMessagesWithFallback(
+      config,
+      locale,
+      fetchFn,
+      requestedNamespaces,
+    );
+
+    // Schema 2: a failed download serves the last verified copy (stale). That
+    // is not an update, so subscribers are not told one happened.
+    if (isSchema2(freshManifest) && loadedMessageVersions.get(baseCacheKey) !== newVersion) {
+      logger.debug(`revalidate: "${safeLng}" still on ${oldVersion} (stale)`);
+      return;
+    }
+
+    // `project` is the bus address: listeners only get their own project's events.
+    const project = buildCacheKey(config.cdnBaseUrl, config.project);
+    notifyMessagesUpdate({ locale: safeLng, messages, project });
+    notifyUpdate({
+      project,
+      locale: safeLng,
+      messages,
+      revision: freshManifest?.revision,
+      previousRevision: oldRevision,
+      version: freshManifest?.files?.[safeLng]?.version,
+      changesUrl: freshManifest?.changesUrl,
+      previousReleaseVersion: freshManifest?.previousVersion,
+    });
+  } catch (err) {
+    logger.debug("revalidate: failed (keeping cached copy)", err);
+  } finally {
+    inFlightRevalidations.delete(safeLng);
+  }
+};
+
+/**
+ * Get messages with full fallback chain:
+ * 1. Memory cache (TtlCache) — version-aware: key includes manifest lastModified
+ * 2. CDN fetch — v2 (namespace files) or v1 (single file), with timeout + retry
+ * 3. Persistent storage
+ * 4. staticData
+ * 5. Throw (last resort)
+ *
+ * The manifest is fetched up front so its `lastModified` (or `updatedAt`
+ * fallback) can be baked into the cache key. When the CDN publishes new
+ * content the version moves, every cached entry is orphaned, and the next
+ * call goes to origin. This eliminates stale hits without TTL tuning.
+ */
+const getMessagesWithFallback = async (
+  config: NormalizedConfig,
+  locale: string,
+  fetchFn: typeof fetch,
+  requestedNamespaces?: string[],
+): Promise<Messages> => {
+  const safeLng = normalizeLocale(locale);
+  const logger = createLogger(config, "messages");
+  const baseCacheKey = `${buildCacheKey(config.cdnBaseUrl, config.project)}|${safeLng}`;
+  const storageKey = buildMessagesStorageKey(config.project, safeLng);
+
+  // Fetch manifest first — the freshness oracle. Has its own short-TTL cache +
+  // ETag, so this is essentially free on 304. If the manifest fetch fails
+  // (offline, CDN down), we continue with an `"unversioned"` key and rely on
+  // downstream storage/staticData fallbacks.
+  const manifest = await getManifestWithCache(config, fetchFn).catch(() => null);
+  const version = deriveLocaleVersion(manifest, safeLng);
+  const cacheKey = `${baseCacheKey}|v:${version}`;
+
+  // Remember which published version this locale's messages came from, so
+  // `revalidate` can answer "is there something newer?" with a single manifest
+  // read instead of reading one to learn the old version and another to learn
+  // the new one.
+  //
+  // Schema 2 records it only once a verified copy is in hand (`markLoaded`),
+  // so a failed download is retried by the next revalidation instead of being
+  // mistaken for "already up to date".
+  const schema2 = isSchema2(manifest);
+  const statusKey = buildCacheKey(config.cdnBaseUrl, config.project);
+  const markLoaded = (): void => {
+    loadedMessageVersions.set(baseCacheKey, version);
+    loadedRevisions.set(baseCacheKey, manifest?.revision);
+  };
+  if (schema2) {
+    // Immutable snapshot: a verified copy of this exact version is good forever.
+    const verified = lastVerified.get(baseCacheKey);
+    if (verified && verified.version === version) {
+      markLoaded();
+      return verified.messages;
+    }
+  } else {
+    loadedMessageVersions.set(baseCacheKey, version);
+  }
+
+  // 1. Memory cache — version-aware. A hit here means we already have the
+  // exact published payload for this locale. Old versions are orphaned, so
+  // there is no "serve stale" concern.
+  const memoryCached = messagesCache.get(cacheKey);
+  if (memoryCached) {
+    if (schema2) markLoaded();
+    return memoryCached;
+  }
+
+  // 2. CDN fetch — detect namespace delivery (v2) from manifest, or use single file (v1)
+  try {
+    let result: MessagesFetchResult;
+    const fileEntry = manifest?.files?.[safeLng];
+
+    // Detect namespace delivery (v2) from two sources:
+    // - Rich manifest: per-locale `files[locale].namespaces` object (has URLs, sizes)
+    // - Slim manifest: top-level `manifest.namespaces` string[] (just names, ~240KB smaller)
+    // SDK constructs URLs deterministically — per-locale URL objects are redundant.
+    const perLocaleNs = fileEntry?.namespaces;
+    const hasPerLocaleNs = perLocaleNs != null && Object.keys(perLocaleNs).length > 0;
+    const topLevelNs = manifest?.namespaces;
+    const hasTopLevelNs = Array.isArray(topLevelNs) && topLevelNs.length > 0;
+    const hasNamespaces = hasPerLocaleNs || hasTopLevelNs;
+
+    // Build available namespace set from whichever source exists
+    const availableNs: Set<string> = hasPerLocaleNs
+      ? new Set(Object.keys(perLocaleNs!))
+      : hasTopLevelNs
+        ? new Set(topLevelNs!)
+        : new Set();
+
+    if (hasNamespaces) {
+      if (requestedNamespaces && requestedNamespaces.length > 0) {
+        // ── Per-namespace caching for selective loads ──────────────────
+        // Each namespace is cached individually so cross-page navigations
+        // reuse shared namespaces without re-fetching. Example:
+        //   home needs [common, nav, hero]  → 3 fetches, 3 cache entries
+        //   blog needs [common, nav, blog]  → common+nav = cache hits, 1 fetch
+        const merged: Messages = {};
+        const toFetch: string[] = [];
+
+        for (const ns of requestedNamespaces) {
+          if (!availableNs.has(ns)) continue; // skip non-existent namespaces silently
+          const nsKey = `${baseCacheKey}|v:${version}|ns:${ns}`;
+          const cached = messagesCache.get(nsKey);
+          if (cached?.[ns] != null) {
+            merged[ns] = cached[ns];
+          } else {
+            toFetch.push(ns);
+          }
+        }
+
+        // All namespaces served from cache — zero CDN requests
+        if (toFetch.length === 0) {
+          logger.debug("all namespaces from cache", {
+            count: Object.keys(merged).length,
+          });
+          if (schema2) markLoaded();
+          return merged;
+        }
+
+        logger.debug("selective namespace loading", {
+          cached: Object.keys(merged).length,
+          fetching: toFetch.length,
+          total: requestedNamespaces.length,
+          batch: manifest?.batch ?? false,
+        });
+
+        // ── Batch fetch: single HTTP request for all uncached namespaces ──
+        // Like tRPC batching — N namespace requests merged into 1 round-trip.
+        // Only attempted when CDN declares batch support (manifest.batch === true)
+        // and there are 2+ namespaces to fetch (single ns = direct fetch is fine).
+        // A locale with a snapshot version skips the batch endpoint: batch.json
+        // has no immutable URL, while the per-namespace snapshot files are
+        // one-year cache hits after the first client in a colo — the
+        // request count is the price of never revalidating (platform #115).
+        let fetchedMessages: Messages | null = null;
+        if (manifest?.batch && toFetch.length > 1 && !localeSnapshotVersion(manifest, safeLng)) {
+          fetchedMessages = await fetchBatchNamespaces(config, safeLng, toFetch, fetchFn);
+        }
+
+        // Fallback: parallel individual fetches (always works, even without batch support)
+        if (!fetchedMessages) {
+          const nsResult = await fetchNamespacedMessages(config, safeLng, toFetch, fetchFn, manifest);
+          if (!nsResult.notModified) {
+            fetchedMessages = nsResult.messages;
+          }
+        }
+
+        if (fetchedMessages) {
+          // Cache each fetched namespace individually
+          for (const [ns, data] of Object.entries(fetchedMessages)) {
+            messagesCache.set(
+              `${baseCacheKey}|v:${version}|ns:${ns}`,
+              { [ns]: data },
+              config.messagesCacheTtlMs,
+            );
+            merged[ns] = data;
+          }
+        }
+
+        // Write merged result to storage for offline fallback (fire-and-forget)
+        writeToStorage(config.storage, storageKey, merged, (err) => markStorageError(statusKey, err));
+        if (schema2) markLoaded();
+        return merged;
+      }
+
+      // v2 full fetch: prefer batch endpoint when CDN supports it, fallback to parallel.
+      // This avoids 100+ individual CDN requests per locale when callers don't pass
+      // the selective `namespaces` option — single round-trip instead of N round-trips.
+      const fullNs = [...availableNs];
+      let batched: Messages | null = null;
+      if (manifest?.batch && fullNs.length > 1 && !localeSnapshotVersion(manifest, safeLng)) {
+        batched = await fetchBatchNamespaces(config, safeLng, fullNs, fetchFn);
+      }
+      result = batched
+        ? { messages: batched, notModified: false, etag: null }
+        : await fetchNamespacedMessages(config, safeLng, fullNs, fetchFn, manifest);
+    } else {
+      // v1: single-file fetch with ETag support (unchanged path)
+      const cachedETag = messagesETagCache.get(cacheKey);
+      result = await fetchMessagesFromCdn(config, safeLng, fetchFn, cachedETag, manifest);
+
+      // 304 Not Modified — CDN confirmed content unchanged; refresh TTL with stored data
+      if (result.notModified) {
+        const stored = await readFromStorage<Messages>(config.storage, storageKey);
+        if (stored) {
+          logger.debug(`304: refreshing TTL for "${safeLng}" from storage`);
+          messagesCache.set(cacheKey, stored, config.messagesCacheTtlMs);
+          return stored;
+        }
+        // No storage fallback — re-fetch without ETag to get fresh data
+        const freshResult = await fetchMessagesFromCdn(config, safeLng, fetchFn, undefined, manifest);
+        if (!freshResult.notModified) {
+          messagesCache.set(cacheKey, freshResult.messages, config.messagesCacheTtlMs);
+          if (freshResult.etag) messagesETagCache.set(cacheKey, freshResult.etag, config.manifestCacheTtlMs);
+          writeToStorage(config.storage, storageKey, freshResult.messages, (err) => markStorageError(statusKey, err));
+          return freshResult.messages;
+        }
+      }
+    }
+
+    // 200 OK — new or changed content (both v1 non-304 and v2)
+    if (!result.notModified) {
+      messagesCache.set(cacheKey, result.messages, config.messagesCacheTtlMs);
+      if (result.etag) messagesETagCache.set(cacheKey, result.etag, config.manifestCacheTtlMs);
+      writeToStorage(config.storage, storageKey, result.messages, (err) => markStorageError(statusKey, err));
+      if (schema2) {
+        lastVerified.set(baseCacheKey, {
+          version,
+          revision: manifest?.revision,
+          messages: result.messages,
+        });
+        markLoaded();
+        markFresh(statusKey);
+      }
+      return result.messages;
+    }
+
+    // Shouldn't reach here, but satisfy TypeScript
+    throw new Error("[better-i18n] Unexpected 304 without storage fallback");
+  } catch (cdnError) {
+    logger.warn(`CDN fetch failed for locale "${safeLng}", trying fallback sources`, cdnError);
+    markStale(statusKey, cdnError);
+
+    // 2b. Schema 2: keep the last verified copy. It was checked against
+    // sha256/keyCount; nothing since has been.
+    if (schema2) {
+      const verified = lastVerified.get(baseCacheKey);
+      if (verified) {
+        logger.info(`serving last verified messages for "${safeLng}" (stale)`);
+        loadedMessageVersions.set(baseCacheKey, verified.version);
+        loadedRevisions.set(baseCacheKey, verified.revision);
+        return verified.messages;
+      }
+    }
+
+    // 3. Persistent storage
+    const stored = await readFromStorage<Messages>(config.storage, storageKey);
+    if (stored) {
+      logger.info(`serving messages for "${safeLng}" from persistent storage (stale)`);
+      messagesCache.set(cacheKey, stored, config.messagesCacheTtlMs);
+      return stored;
+    }
+
+    // 4. staticData
+    const resolved = await resolveStaticData(config.staticData);
+    if (resolved && resolved[safeLng]) {
+      logger.info(`serving messages for "${safeLng}" from staticData`);
+      return resolved[safeLng];
+    }
+
+    // 5. No fallback available
+    throw cdnError;
+  }
+};
+
+// ─── changesSince ───────────────────────────────────────────────────
+
+const isChangesFile = (value: unknown): value is ChangesFile => {
+  const v = value as ChangesFile | null;
+  return (
+    !!v &&
+    typeof v.revision === "number" &&
+    typeof v.version === "string" &&
+    !!v.locales &&
+    typeof v.locales === "object"
+  );
+};
+
+/** `v/{version}/changes.json` at the end of a URL path: the version, or null for anything else. */
+const changesVersionFromUrl = (url: string | undefined): string | null => {
+  if (!url) return null;
+  try {
+    const [segment, version, file] = new URL(url).pathname.split("/").slice(-3);
+    return segment === VERSIONED_PATH_SEGMENT && file === "changes.json" && version && VERSION_PATTERN.test(version)
+      ? version
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const changesSinceRevision = async (
+  config: NormalizedConfig,
+  fetchFn: typeof fetch,
+  revision: number,
+): Promise<ChangesSinceResult> => {
+  const logger = createLogger(config, "changes");
+  const manifest = await getManifestWithCache(config, fetchFn).catch(() => null);
+  const toRevision = typeof manifest?.revision === "number" ? manifest.revision : null;
+  const base: ChangesSinceResult = { complete: false, fromRevision: revision, toRevision, latest: null };
+
+  if (toRevision === null) return base;
+  // Already at the manifest's revision: nothing changed, and that is a full answer.
+  if (revision >= toRevision) return { ...base, complete: true };
+
+  // The manifest is remote input and names an absolute URL on its own public
+  // origin (`cdn.lefine.ai`, even when the SDK reads through a proxy or a local
+  // edge). Only the release version is taken from it; the file is read from the
+  // CDN this SDK was configured with, so a manifest can never send a request
+  // to another host.
+  const version = changesVersionFromUrl(manifest?.changesUrl);
+  if (!version) return base;
+  const url = `${getProjectBaseUrl(config)}/${VERSIONED_PATH_SEGMENT}/${version}/changes.json`;
+
+  try {
+    const response = await fetchWithRetry(
+      fetchFn,
+      url,
+      { headers: { "Accept-Encoding": "gzip, br" } },
+      config.fetchTimeout,
+      config.retryCount,
+    );
+    if (!response.ok) return base; // 404: pruned like old locale files
+    const body: unknown = await response.json();
+    if (!isChangesFile(body) || body.revision !== toRevision) return base;
+    // Revisions are +1 per publish, so a caller one behind has seen exactly
+    // the release `previousVersion` names: this list is everything since.
+    return { ...base, latest: body, complete: revision === toRevision - 1 };
+  } catch (err) {
+    logger.debug("changes.json failed", err);
+    return base;
+  }
+};
+
+// ─── Public API ─────────────────────────────────────────────────────
+
+/**
+ * Create an i18n core instance
+ *
+ * @example
+ * ```ts
+ * const i18n = createI18nCore({
+ *   project: 'acme/dashboard',
+ *   defaultLocale: 'en',
+ * })
+ *
+ * const messages = await i18n.getMessages('en')
+ * const locales = await i18n.getLocales()
+ * ```
+ *
+ * @example
+ * ```ts
+ * // With fallback support
+ * const i18n = createI18nCore({
+ *   project: 'acme/dashboard',
+ *   defaultLocale: 'en',
+ *   storage: createAutoStorage(),
+ *   staticData: { en: { common: { hello: "Hello" } } },
+ *   fetchTimeout: 5000,
+ *   retryCount: 2,
+ * })
+ * ```
+ */
+export const createI18nCore = (config: I18nCoreConfig): I18nCore => {
+  const normalized = normalizeConfig(config);
+  const fetchFn = normalized.fetch ?? fetch;
+  // Identity of this instance on the shared update bus.
+  const busKey = buildCacheKey(normalized.cdnBaseUrl, normalized.project);
+
+  return {
+    config: normalized,
+
+    getManifest: (options?: { forceRefresh?: boolean }) =>
+      getManifestWithCache(normalized, fetchFn, options?.forceRefresh),
+
+    getMessages: (locale: string, options?: { namespaces?: string[] }) =>
+      getMessagesWithFallback(
+        normalized,
+        locale,
+        fetchFn,
+        options?.namespaces ?? normalized.namespaces,
+      ),
+
+    getLocales: async (): Promise<string[]> => {
+      const manifest = await getManifestWithCache(normalized, fetchFn);
+      const languages = extractLanguages(manifest);
+
+      if (languages.length === 0) {
+        throw new Error("[better-i18n] No locales found in manifest");
+      }
+
+      return languages.map((lang) => lang.code);
+    },
+
+    getLanguages: async (): Promise<LanguageOption[]> => {
+      const manifest = await getManifestWithCache(normalized, fetchFn);
+      const languages = extractLanguages(manifest);
+
+      if (languages.length === 0) {
+        throw new Error("[better-i18n] No languages found in manifest");
+      }
+
+      return languages;
+    },
+
+    onMessagesUpdate: (listener: MessagesUpdateListener): (() => void) => {
+      const scoped: MessagesUpdateListener = (event) => {
+        if (event.project === undefined || event.project === busKey) listener(event);
+      };
+      messagesListeners.add(scoped);
+      return () => {
+        messagesListeners.delete(scoped);
+      };
+    },
+
+    onUpdate: (listener: CacheUpdateListener): (() => void) => {
+      const scoped: CacheUpdateListener = (event) => {
+        if (event.project === busKey) listener(event);
+      };
+      updateListeners.add(scoped);
+      return () => {
+        updateListeners.delete(scoped);
+      };
+    },
+
+    changesSince: (revision: number): Promise<ChangesSinceResult> =>
+      changesSinceRevision(normalized, fetchFn, revision),
+
+    getStatus: (): CacheStatus => ({
+      ...statusFor(buildCacheKey(normalized.cdnBaseUrl, normalized.project)),
+    }),
+
+    revalidate: (locale: string, options?: { namespaces?: string[] }): Promise<void> =>
+      revalidateMessages(
+        normalized,
+        locale,
+        fetchFn,
+        options?.namespaces ?? normalized.namespaces,
+      ),
+  };
+};
+
+/**
+ * Clear all caches (useful for testing)
+ */
+export const clearManifestCache = (): void => {
+  manifestCache.clear();
+  lastManifests.clear();
+  cacheStatuses.clear();
+};
+
+/**
+ * Clear the messages cache (useful for testing)
+ */
+export const clearMessagesCache = (): void => {
+  messagesCache.clear();
+  lastVerified.clear();
+  loadedRevisions.clear();
+};

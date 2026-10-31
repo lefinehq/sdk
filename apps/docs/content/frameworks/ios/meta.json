@@ -1,0 +1,10 @@
+{
+  "title": "iOS (Swift)",
+  "icon": "Smartphone",
+  "defaultOpen": false,
+  "pages": [
+    "index",
+    "setup",
+    "api-reference"
+  ]
+}

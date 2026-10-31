@@ -1,0 +1,197 @@
+---
+title: Setup
+description: Basic TanStack Start setup with Lefine
+---
+
+This guide covers the basic setup for Lefine with TanStack Start.
+
+## Step 1: Create i18n Configuration
+
+Create a minimal configuration file:
+
+```ts title="app/i18n.config.ts"
+export const i18nConfig = { // [!code highlight]
+  projectId: "your-org/your-project", // [!code highlight]
+  defaultLocale: "en", // [!code highlight]
+} as const // [!code highlight]
+```
+
+<Callout type="info">
+  Available languages are **automatically fetched** from the Lefine CDN manifest. No need to maintain a static list!
+</Callout>
+
+## Step 2: Setup Root Layout
+
+Load messages on the server and provide them to the client:
+
+```tsx title="app/routes/__root.tsx"
+import {
+  createRootRouteWithContext,
+  Outlet,
+  HeadContent,
+  Scripts,
+} from "@tanstack/react-router"
+import { BetterI18nProvider } from "@better-i18n/use-intl" // [!code ++]
+import { getMessages } from "@better-i18n/use-intl/server" // [!code ++]
+import { i18nConfig } from "../i18n.config" // [!code ++]
+
+interface RouterContext {
+  locale: string
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
+  staleTime: 0, // re-run loader when locale changes // [!code highlight]
+  loader: async ({ context }) => {
+    const locale = context.locale || i18nConfig.defaultLocale
+
+    const messages = await getMessages({ // [!code ++]
+      projectId: i18nConfig.projectId, // [!code ++]
+      locale, // [!code ++]
+    }) // [!code ++]
+
+    return { messages, locale } // [!code ++]
+  },
+
+  component: RootComponent,
+})
+
+function RootComponent() {
+  const { messages, locale } = Route.useLoaderData()
+
+  return (
+    <html lang={locale}>
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        <BetterI18nProvider // [!code ++]
+          projectId={i18nConfig.projectId} // [!code ++]
+          locale={locale} // [!code ++]
+          messages={messages} // [!code ++]
+          timeZone="UTC" // [!code highlight]
+        > // [!code ++]
+          <Outlet />
+        </BetterI18nProvider> // [!code ++]
+        <Scripts />
+      </body>
+    </html>
+  )
+}
+```
+
+<Callout type="warning">
+  **Timezone Requirement:** `use-intl` v4+ requires a `timeZone` during SSR to prevent markup mismatches. Use `"UTC"` as a safe default.
+</Callout>
+
+<Callout type="info">
+  **Why `staleTime: 0`?** Without it, TanStack Router caches the root loader result and skips re-running it on SPA navigations. This means locale switches won't fetch new translations — UI strings stay in the old language. `staleTime: 0` ensures the loader re-runs, while `getMessages()` TtlCache (60s) keeps same-locale navigations instant.
+</Callout>
+
+### BetterI18nProvider Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `project` | `string` | Required | Project identifier (`org/project`) |
+| `locale` | `string` | Required | Current locale (from router context) |
+| `messages` | `Messages` | — | Pre-loaded SSR messages from `getMessages()` |
+| `timeZone` | `string` | System tz | IANA timezone — set explicitly to avoid SSR hydration mismatches |
+| `onLocaleChange` | `(locale: string) => void` | — | Locale switch callback |
+| `storage` | `TranslationStorage` | — | Persistent translation cache adapter |
+| `staticData` | `Record<string, Messages>` | — | Offline fallback translations |
+| `fetchTimeout` | `number` | `10000` | CDN fetch timeout in ms |
+| `retryCount` | `number` | `1` | Retry attempts on CDN failure |
+
+## Step 3: Use Translations
+
+Use the `useTranslations` hook in any component:
+
+```tsx title="app/routes/index.tsx"
+import { createFileRoute } from "@tanstack/react-router"
+import { useTranslations } from "@better-i18n/use-intl" // [!code highlight]
+
+export const Route = createFileRoute("/")({
+  component: HomePage,
+})
+
+function HomePage() {
+  const t = useTranslations("home") // [!code highlight]
+
+  return (
+    <div>
+      <h1>{t("title")}</h1>
+      <p>{t("description")}</p>
+    </div>
+  )
+}
+```
+
+## Step 4: Add Language Switcher
+
+Use the built-in component or build your own:
+
+```tsx
+import { LanguageSwitcher } from "@better-i18n/use-intl"
+
+function Header() {
+  return (
+    <header>
+      <nav>
+        <LanguageSwitcher className="locale-select" />
+      </nav>
+    </header>
+  )
+}
+```
+
+## Interpolation
+
+Pass dynamic values to translations:
+
+```tsx
+function Greeting({ user }) {
+  const t = useTranslations("greeting")
+
+  return <p>{t("welcome", { name: user.name })}</p>
+}
+```
+
+```json title="Translation file"
+{
+  "greeting": {
+    "welcome": "Welcome back, {name}!"
+  }
+}
+```
+
+## Date & Number Formatting
+
+Use the `useFormatter` hook:
+
+```tsx
+import { useFormatter } from "@better-i18n/use-intl"
+
+function ProductPrice({ price, date }) {
+  const format = useFormatter()
+
+  return (
+    <div>
+      <span>{format.number(price, { style: "currency", currency: "USD" })}</span>
+      <time>{format.dateTime(date, { dateStyle: "medium" })}</time>
+    </div>
+  )
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="SSR & Hydration" icon="Server" href="/frameworks/tanstack-start/ssr">
+    Configure server-side rendering properly.
+  </Card>
+  <Card title="Path-Based Routing" icon="Route" href="/frameworks/tanstack-start/routing">
+    Add SEO-friendly locale URLs.
+  </Card>
+  <Card title="Middleware" icon="Shield" href="/frameworks/tanstack-start/middleware">
+    Automatic locale detection.
+  </Card>
+</Cards>

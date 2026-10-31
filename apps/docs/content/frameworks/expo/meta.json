@@ -1,0 +1,14 @@
+{
+  "title": "Expo",
+  "icon": "ExpoIcon",
+  "defaultOpen": false,
+  "pages": [
+    "index",
+    "setup",
+    "offline-caching",
+    "dynamic-localizations",
+    "---Native---",
+    "widget-extension",
+    "api-reference"
+  ]
+}

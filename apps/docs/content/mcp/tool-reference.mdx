@@ -1,0 +1,607 @@
+---
+title: Available Tools
+description: MCP tools for translation and content management
+icon: Wrench
+---
+
+Lefine provides two MCP servers with focused toolsets. All project-scoped tools require a `project` parameter in `org/project` format (e.g., `"aliosman-co/personal"`).
+
+## Translation Tools (`@better-i18n/mcp`)
+
+<Callout type="info">
+  Call `listProjects` first to discover available projects before using other tools.
+</Callout>
+
+## Discovery Tools
+
+<Accordion>
+
+<AccordionItem title="listProjects">
+List all projects you have access to across all organizations.
+
+**Use this first** to discover available projects before other operations.
+
+**Returns:** Project slugs, source/target languages, organization names.
+
+</AccordionItem>
+
+<AccordionItem title="getProject">
+Get project details including namespaces, languages, key count, and translation coverage.
+
+**Returns:** Namespaces, languages with coverage percentages, total key count.
+
+</AccordionItem>
+
+</Accordion>
+
+## Reading Tools
+
+<Accordion>
+
+<AccordionItem title="listKeys">
+Browse translation keys in compact, paginated format. Optimized for exploration — use `getTranslations` when you need actual translation text for AI tasks.
+
+**Parameters:**
+
+- `search` (optional): Search key names by partial match. Single string or array for multi-term OR search (e.g., `["login", "signup"]`).
+- `namespaces` (optional): Filter by specific namespaces (e.g., `["auth", "common"]`).
+- `missingLanguage` (optional): Return only keys that DON'T have a translation for this language code (e.g. `"tr"`, `"zh-Hans"`).
+- `fields` (optional): Fields to include per key. Default: `["id", "sourceText"]`.
+  - `"translatedLanguageCount"` → `tlc: 5` — token-efficient count, ideal for coverage overview
+  - `"translatedLanguages"` → `tl: ["de","fr","tr"]` — full list of translated lang codes
+  - `"translations"` → `tr: {"de":"..."}` — actual translation text (heaviest)
+- `page` (optional): Page number, 1-indexed (default: 1).
+- `limit` (optional): Keys per page, max 100 (default: 20).
+
+**Response format (compact):**
+- `tot`: total matching keys | `ret`: returned this page | `has_more`: more pages exist
+- `nss`: namespace lookup table — each key's `ns` is an index into this array
+- `k`: key items with `k` (name), `ns` (namespace index), and requested fields
+
+**Examples:**
+
+```json
+// Browse first page
+{ "project": "org/project" }
+
+// Find keys missing Turkish
+{ "project": "org/project", "missingLanguage": "tr" }
+
+// Coverage overview (token-efficient)
+{ "project": "org/project", "fields": ["id", "translatedLanguageCount"] }
+
+// Search with full language list
+{ "project": "org/project", "search": "login", "fields": ["id", "sourceText", "translatedLanguages"] }
+```
+
+</AccordionItem>
+
+</Accordion>
+
+## Writing Tools
+
+<Accordion>
+
+<AccordionItem title="createKeys">
+Create one or more translation keys with source text and optional target translations.
+
+**Parameters:**
+
+- `keys`: Array of keys to create:
+  - `name`: Key name (e.g., `"submit_button"`, `"nav.home"`)
+  - `namespace`: Namespace (optional, default: `"default"`)
+  - `sourceText`: Source language text
+  - `translations`: Target translations object (e.g., `{ "tr": "Gönder", "de": "Senden" }`)
+
+Source language text goes in `sourceText`, not in `translations`.
+
+```json
+{
+  "keys": [
+    {
+      "name": "auth.login.title",
+      "namespace": "common",
+      "sourceText": "Sign In",
+      "translations": { "tr": "Giriş Yap" }
+    }
+  ]
+}
+```
+
+</AccordionItem>
+
+<AccordionItem title="updateKeys">
+Update source text and/or target translations. Each entry updates ONE language for ONE key.
+
+**Parameters:**
+
+- `translations`: Array of translation updates:
+  - `key`: Key name (e.g., `"submit_button"`)
+  - `namespace`: Namespace (optional, default: `"default"`)
+  - `language`: Language code (e.g., `"en"`, `"tr"`, `"de"`)
+  - `text`: New text value
+  - `isSource`: Set `true` to update source text (optional)
+  - `status`: `"published"`, `"pending"`, `"reviewed"` (optional, default: `"published"`)
+
+```json
+{
+  "translations": [
+    { "key": "auth.login.title", "language": "en", "text": "Sign In", "isSource": true },
+    { "key": "auth.login.title", "language": "tr", "text": "Giriş Yap" }
+  ]
+}
+```
+
+</AccordionItem>
+
+<AccordionItem title="deleteKeys">
+Soft-delete translation keys by UUID. Keys are removed from CDN/GitHub on next publish.
+
+**Parameters:**
+
+- `keyIds`: Array of key UUIDs (1-100). Get UUIDs from `listKeys`.
+
+</AccordionItem>
+
+<AccordionItem title="proposeLanguages">
+Add one or more target languages to the project. Already-existing languages are silently skipped.
+
+**Parameters:**
+
+- `languages`: Array of languages to add (1–50):
+  - `languageCode`: ISO 639-1 code (e.g. `"fr"`, `"ja"`) or BCP 47 locale (e.g. `"zh-Hans"`, `"pt-BR"`)
+  - `status` (optional): `"active"` (published to CDN, default) or `"draft"` (visible but not deployed)
+
+```json
+{
+  "languages": [
+    { "languageCode": "tr", "status": "active" },
+    { "languageCode": "zh-Hans" }
+  ]
+}
+```
+
+</AccordionItem>
+
+<AccordionItem title="proposeLanguageEdits">
+Update the status of existing target languages — activate, deactivate, or archive them.
+
+**Parameters:**
+
+- `edits`: Array of status changes (1–50):
+  - `languageCode`: ISO 639-1 or BCP 47 locale code of the language
+  - `newStatus`: `"active"` (published to CDN), `"draft"` (visible but not deployed), or `"archived"` (hidden from editor and CDN)
+
+```json
+{
+  "edits": [
+    { "languageCode": "de", "newStatus": "active" },
+    { "languageCode": "zh-Hans", "newStatus": "archived" }
+  ]
+}
+```
+
+</AccordionItem>
+
+</Accordion>
+
+## Publish Tools
+
+<Callout type="warning">
+  **Production Impact:** Publishing deploys changes to live CDN or GitHub. Always call `getPendingChanges` first to verify what will be deployed.
+</Callout>
+
+<Accordion>
+
+<AccordionItem title="getPendingChanges">
+Preview what will be deployed before publishing. Shows translations, deleted keys, and publish destination.
+
+**Returns:**
+
+- `hasPendingChanges`: Boolean indicating if there's anything to publish
+- `summary`: Object with translation counts, deleted keys, and total changes
+- `byLanguage`: Breakdown of pending translations by language code
+- `deletedKeys`: Keys that will be permanently removed on publish
+- `publishDestination`: `"github"`, `"cdn"`, or `"none"`
+- `cannotPublishReason`: Error message if publishing is blocked
+
+**Workflow:**
+
+1. Call `getPendingChanges` to see what's pending
+2. Review the changes
+3. Call `publishTranslations` only if changes look correct
+
+</AccordionItem>
+
+<AccordionItem title="publishTranslations">
+Deploy pending changes to production (CDN or GitHub). Returns immediately with sync job IDs for tracking.
+
+**Parameters:**
+
+- `translations` (optional): Array of specific translations to publish with `keyId` and `languageCode`. If omitted, publishes ALL pending changes.
+
+**Returns:**
+
+- `success`: Boolean indicating if publish was initiated
+- `published`: Number of translations published
+- `repositories`: Number of repositories updated
+- `syncJobIds`: Array of sync job IDs for tracking with `getSync`
+
+**Important:**
+
+- This is an async operation - jobs typically complete in 5-30 seconds
+- Use `getSync(syncId)` to verify completion
+- Deleted keys are permanently removed from CDN/GitHub and database
+
+```json
+{
+  "translations": [
+    { "keyId": "uuid-1", "languageCode": "tr" },
+    { "keyId": "uuid-2", "languageCode": "de" }
+  ]
+}
+```
+
+</AccordionItem>
+
+</Accordion>
+
+## Sync Tools
+
+<Accordion>
+
+<AccordionItem title="getSyncs">
+List recent sync operations for a project.
+
+**Parameters:**
+
+- `limit` (optional): Max results (default: 10, max: 50)
+- `status` (optional): `"pending"`, `"in_progress"`, `"completed"`, `"failed"`
+- `type` (optional): `"initial_import"`, `"source_sync"`, `"cdn_upload"`, `"batch_publish"`
+
+</AccordionItem>
+
+<AccordionItem title="getSync">
+Get details about a specific sync operation including logs and affected keys.
+
+**Parameters:**
+
+- `syncId`: Sync job ID from `getSyncs` or `publishTranslations` response.
+
+**Returns:**
+
+- `id`: Sync job ID
+- `type`: Job type (e.g., `"batch_publish"`)
+- `status`: `"completed"`, `"failed"`, `"in_progress"`, `"pending"`, `"cancelled"`
+- `startedAt`: ISO timestamp
+- `completedAt`: ISO timestamp (null if still running)
+- `errorMessage`: Error details if failed
+- `logs`: Array of log messages
+- `affectedKeys`: Keys modified in this sync
+
+</AccordionItem>
+
+</Accordion>
+
+---
+
+## Content Tools (`@better-i18n/mcp-content`)
+
+These tools manage headless CMS content — models, entries, and localized content fields.
+
+<Callout type="info">
+  Content tools are in a separate MCP package. Install `@better-i18n/mcp-content` alongside `@better-i18n/mcp` if you use both translation and content features.
+</Callout>
+
+### Model Tools
+
+<Accordion>
+
+<AccordionItem title="listContentModels">
+List all content models in a project with entry counts.
+
+**Returns:** Array of models with `slug`, `displayName`, `entryCount`, and field definitions.
+
+</AccordionItem>
+
+<AccordionItem title="getContentModel">
+Get a content model's full details including all field definitions.
+
+**Parameters:**
+
+- `modelSlug`: The model's URL slug (e.g., `"blog-post"`)
+
+**Returns:** Model with fields, each containing `name`, `type`, `required`, `description`.
+
+</AccordionItem>
+
+<AccordionItem title="createContentModel">
+Create a new content model with optional initial field definitions.
+
+**Parameters:**
+
+- `slug`: Model slug (lowercase, hyphens only, e.g., `"blog-posts"`)
+- `displayName`: Human-readable model name
+- `description` (optional): Model description
+- `kind` (optional): `"collection"` (multiple entries, default) or `"single"` (one entry)
+- `icon` (optional): Icon identifier
+- `enableVersionHistory` (optional): Enable version history tracking (default: `true`)
+- `fields` (optional): Array of initial field definitions with `name`, `displayName`, `type`, `localized`, `required`, `options`, `fieldConfig`
+
+```json
+{
+  "slug": "blog-posts",
+  "displayName": "Blog Posts",
+  "kind": "collection",
+  "fields": [
+    { "name": "author_name", "displayName": "Author", "type": "text", "required": true },
+    { "name": "category", "displayName": "Category", "type": "enum", "options": { "enumValues": [{ "label": "Tech", "value": "tech" }] } }
+  ]
+}
+```
+
+</AccordionItem>
+
+<AccordionItem title="updateContentModel">
+Update a content model's metadata, including display settings.
+
+**Parameters:**
+
+- `modelSlug`: Content model slug to update
+- `displayName` (optional): Updated display name
+- `description` (optional): Updated description
+- `kind` (optional): Updated model kind (`"collection"` or `"single"`)
+- `icon` (optional): Updated icon identifier
+- `enableVersionHistory` (optional): Updated version history setting
+- `tableSettings` (optional): Table display settings for base field column visibility
+  - `baseFields`: Map of base field name → show in table (e.g., `{ "title": true, "slug": false, "body": false }`)
+
+<Callout type="warning">
+  `tableSettings.baseFields` is not available in the OSS version. This parameter is ignored when running the open-source MCP server.
+</Callout>
+
+</AccordionItem>
+
+<AccordionItem title="deleteContentModel">
+Delete a content model and all its entries.
+
+**Parameters:**
+
+- `modelSlug`: Content model slug to delete
+
+**Warning:** This permanently deletes the model and all associated entries, fields, and content.
+
+</AccordionItem>
+
+</Accordion>
+
+### Field Tools
+
+<Accordion>
+
+<AccordionItem title="addField">
+Add a custom field to a content model. Field name must be snake_case.
+
+**Parameters:**
+
+- `modelSlug`: Parent content model slug
+- `name`: Field name (snake_case, e.g., `"author_name"`)
+- `displayName`: Display name (e.g., `"Author Name"`)
+- `type` (optional): Field type — `text`, `textarea`, `richtext`, `number`, `boolean`, `date`, `datetime`, `enum`, `media`, `relation` (default: `text`)
+- `localized` (optional): Whether field is localized per language (default: `false`)
+- `required` (optional): Whether field is required (default: `false`)
+- `placeholder` (optional): Placeholder text
+- `helpText` (optional): Help text
+- `position` (optional): Sort position (auto-calculated if omitted)
+- `options` (optional): Field-level options
+  - `enumValues`: Allowed values for enum fields — `[{ "label": "Display", "value": "stored" }]`
+  - `showInTable`: Whether this field appears as a column in the content list table
+  - `unsplash`: `{ "enabled": true }` for Unsplash integration
+  - `aiGeneration`: `{ "enabled": true, "prompt": "..." }` for AI generation
+- `fieldConfig` (optional): Type-specific configuration
+  - `targetModel`: Target model slug for relation fields
+
+There is no array or group field type. To model repeating content, do **not** create numbered fields (`feature_1`, `feature_2`, `tag_1_slug`…) — that is an anti-pattern. Model the repeated item as its own collection and point at it with a `relation` field, which is also how you reference entries that already exist. See [Modeling repeating content](/sdk/models#modeling-repeating-content). Body blocks are described in some older material but were never shipped, so do not plan around them.
+
+</AccordionItem>
+
+<AccordionItem title="updateField">
+Update a custom field's properties within a content model.
+
+**Parameters:**
+
+- `modelSlug`: Parent content model slug
+- `fieldName`: Field name to update
+- `displayName` (optional): Updated display name
+- `type` (optional): Updated field type
+- `localized` (optional): Updated localization setting
+- `required` (optional): Updated required setting
+- `placeholder` (optional): Updated placeholder text
+- `helpText` (optional): Updated help text
+- `options` (optional): Updated field-level options
+  - `enumValues`: Updated allowed values for enum fields
+  - `showInTable`: Whether this field appears as a column in the content list table
+  - `unsplash`: Updated Unsplash settings
+  - `aiGeneration`: Updated AI generation settings
+- `fieldConfig` (optional): Updated type-specific configuration
+
+</AccordionItem>
+
+<AccordionItem title="removeField">
+Remove a custom field from a content model.
+
+**Parameters:**
+
+- `modelSlug`: Parent content model slug
+- `fieldName`: Field name to remove
+
+**Warning:** This permanently removes the field and all its values from existing entries.
+
+</AccordionItem>
+
+<AccordionItem title="reorderFields">
+Reorder custom fields in a content model.
+
+**Parameters:**
+
+- `modelSlug`: Parent content model slug
+- `fieldNames`: Array of field names in desired order
+
+</AccordionItem>
+
+</Accordion>
+
+### Entry Tools
+
+<Accordion>
+
+<AccordionItem title="listContentEntries">
+List content entries with filtering and pagination.
+
+**Parameters:**
+
+- `modelSlug` (optional): Filter by content model
+- `search` (optional): Text search across title and body
+- `language` (optional): Language code for translated content
+- `status` (optional): `"draft"`, `"published"`, or `"archived"`
+- `missingLanguage` (optional): Return entries that don't have a translation for this language code
+- `searchLanguages` (optional): Array of language codes to search across when using `search`
+- `searchInBody` (optional): Whether to include body content in text search (default: `false`)
+- `expand` (optional): Additional fields to include in the response (e.g., `["customFields", "translations"]`)
+- `compact` (optional): Return minimal fields only (default: `false`)
+
+**Returns:** Paginated list of entries with `id`, `slug`, `title`, `status`, `publishedAt`.
+
+</AccordionItem>
+
+<AccordionItem title="getContentEntry">
+Get a single content entry with all translations and custom field values.
+
+**Parameters:**
+
+- `entryId`: The entry UUID
+
+**Returns:** Full entry with `title`, `body`, `bodyMarkdown`, `bodyHtml`, `translations`, `customFields`.
+
+</AccordionItem>
+
+<AccordionItem title="createContentEntry">
+Create a new content entry in a model.
+
+**Parameters:**
+
+- `modelSlug`: Target content model slug
+- `title`: Entry title
+- `slug` (optional): URL slug (auto-generated from title if omitted)
+- `bodyMarkdown` (optional): Entry body as Markdown (automatically converted to HTML and editor JSON)
+- `translations` (optional): Map of language code → title for multi-language support (e.g., `{ "en": "Hello", "tr": "Merhaba" }`)
+
+```json
+{
+  "modelSlug": "blog-post",
+  "title": "Getting Started with i18n",
+  "bodyMarkdown": "# Welcome\n\nThis guide covers...",
+  "translations": { "en": "Getting Started with i18n", "tr": "i18n'e Başlarken" }
+}
+```
+
+</AccordionItem>
+
+<AccordionItem title="updateContentEntry">
+Update an existing content entry's translations or metadata.
+
+**Parameters:**
+
+- `entryId`: The entry UUID
+- `languageCode`: Language to update
+- `title` (optional): Updated title
+- `bodyMarkdown` (optional): Updated body as Markdown
+- `excerpt` (optional): Short summary
+- `metaTitle` (optional): SEO title
+- `metaDescription` (optional): SEO description
+
+</AccordionItem>
+
+<AccordionItem title="duplicateContentEntry">
+Duplicate an existing content entry within the same model.
+
+**Parameters:**
+
+- `entryId`: Source entry UUID to duplicate
+
+**Returns:** Newly created entry with a generated slug (original slug + `-copy`).
+
+</AccordionItem>
+
+</Accordion>
+
+### Publish Tools
+
+<Accordion>
+
+<AccordionItem title="publishContentEntry">
+Publish a content entry to CDN. Sets status to `"published"` and triggers async CDN upload.
+
+**Parameters:**
+
+- `entryId`: The entry UUID
+
+**Returns:** Updated entry with `publishedAt` timestamp.
+
+</AccordionItem>
+
+<AccordionItem title="deleteContentEntry">
+Hard-delete a content entry (irreversible).
+
+**Parameters:**
+
+- `entryId`: The entry UUID
+
+**Warning:** This permanently deletes the entry and all its translations. This action cannot be undone.
+
+</AccordionItem>
+
+<AccordionItem title="bulkCreateEntries">
+Create multiple content entries in a single model at once (max 20). Partial success is possible — response reports created count and any failures.
+
+**Parameters:**
+
+- `modelSlug`: Content model slug (required)
+- `entries`: Array of entry objects (1–20), each with:
+  - `title`: Entry title (required)
+  - `slug`: URL slug (required)
+  - `bodyMarkdown` (optional): Body content as Markdown
+  - `status` (optional): `"draft"` or `"published"` (default: `"draft"`)
+  - `customFields` (optional): Custom field values
+  - `translations` (optional): Map of language code → `{ title, bodyMarkdown, customFields }`
+
+**Returns:** `{ created: number, failed: number, entries: [...], errors: [...] }`
+
+</AccordionItem>
+
+<AccordionItem title="bulkPublishEntries">
+Publish multiple content entries at once.
+
+**Parameters:**
+
+- `entryIds`: Array of entry UUIDs to publish (required)
+- `modelSlug` (optional): Content model slug (for context/validation only — not required)
+
+**Returns:** Array of published entries with updated `publishedAt` timestamps.
+
+</AccordionItem>
+
+</Accordion>
+
+---
+
+## Best Practices
+
+1. **Discover First**: Start with `listProjects` → `getProject` to understand the project.
+2. **Find Gaps**: Use `listKeys` to see all keys and find missing translations.
+3. **Batch Operations**: `createKeys` and `updateKeys` handle single and bulk operations efficiently.
+4. **Source Text**: Use `updateKeys` with `isSource: true` to update source text.
+5. **Clean Up**: Use `deleteKeys` to remove unused keys (soft delete until publish).
+6. **Safe Publishing**: Always call `getPendingChanges` before `publishTranslations` to verify changes.
+7. **Track Deployment**: Use `getSync(syncId)` to verify publish jobs completed successfully.
+8. **Language Setup**: Use `proposeLanguages` to add new languages, `proposeLanguageEdits` to change status (active/draft/archived).

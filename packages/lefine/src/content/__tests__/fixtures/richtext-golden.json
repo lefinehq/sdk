@@ -1,0 +1,584 @@
+{
+  "_source": "Generated 2026-10-30 with Lefine's own rich text HTML renderer (internalDocToHref: /pages/{id}, uploadToSrc: /media/{id}.png). The SDK's renderers must draw the same DOM.",
+  "en": {
+    "doc": {
+      "schemaVersion": 1,
+      "root": {
+        "type": "root",
+        "direction": "ltr",
+        "format": "",
+        "indent": 0,
+        "version": 1,
+        "children": [
+          {
+            "type": "heading",
+            "tag": "h2",
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "children": [
+              {
+                "type": "text",
+                "text": "Title",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "type": "heading",
+            "tag": "h4",
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "children": [
+              {
+                "type": "text",
+                "text": "Small",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "textFormat": 0,
+            "textStyle": "",
+            "children": [
+              {
+                "type": "text",
+                "text": "plain ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": "bold",
+                "format": 1,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": " ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": "italic",
+                "format": 2,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": " ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": "strike",
+                "format": 4,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": " ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": "under",
+                "format": 8,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": " ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": "code",
+                "format": 16,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": " ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": "all",
+                "format": 11,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "linebreak"
+              },
+              {
+                "type": "text",
+                "text": "after break",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "textFormat": 0,
+            "textStyle": "",
+            "children": [
+              {
+                "type": "text",
+                "text": "see ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "link",
+                "direction": "ltr",
+                "format": "",
+                "indent": 0,
+                "version": 1,
+                "fields": {
+                  "linkType": "custom",
+                  "url": "https://lefine.ai/docs",
+                  "newTab": true
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "docs",
+                    "format": 0,
+                    "detail": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "version": 1
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " and ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "link",
+                "direction": "ltr",
+                "format": "",
+                "indent": 0,
+                "version": 1,
+                "fields": {
+                  "linkType": "internal",
+                  "newTab": false,
+                  "doc": {
+                    "relationTo": "entry",
+                    "value": "e1"
+                  }
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "pricing",
+                    "format": 0,
+                    "detail": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "version": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "list",
+            "listType": "bullet",
+            "tag": "ul",
+            "start": 1,
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "children": [
+              {
+                "type": "listitem",
+                "value": 1,
+                "direction": "ltr",
+                "format": "",
+                "indent": 0,
+                "version": 1,
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "one",
+                    "format": 0,
+                    "detail": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "version": 1
+                  }
+                ]
+              },
+              {
+                "type": "listitem",
+                "value": 2,
+                "direction": "ltr",
+                "format": "",
+                "indent": 0,
+                "version": 1,
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "two",
+                    "format": 0,
+                    "detail": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "version": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "list",
+            "listType": "number",
+            "tag": "ol",
+            "start": 1,
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "children": [
+              {
+                "type": "listitem",
+                "value": 1,
+                "direction": "ltr",
+                "format": "",
+                "indent": 0,
+                "version": 1,
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "first",
+                    "format": 0,
+                    "detail": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "version": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "quote",
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "children": [
+              {
+                "type": "text",
+                "text": "quoted",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "type": "horizontalrule"
+          },
+          {
+            "type": "paragraph",
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "textFormat": 0,
+            "textStyle": "",
+            "children": []
+          }
+        ]
+      }
+    },
+    "html": "<div class=\"richtext\"><h2>Title</h2><h4>Small</h4><p>plain <strong>bold</strong> <em>italic</em> <s>strike</s> <u>under</u> <code>code</code> <u><em><strong>all</strong></em></u><br />after break</p><p>see <a href=\"https://lefine.ai/docs\" rel=\"noopener noreferrer\" target=\"_blank\">docs</a> and <a href=\"/pages/e1\">pricing</a></p><ul><li>one</li><li>two</li></ul><ol><li>first</li></ol><blockquote>quoted</blockquote><hr /><p><br /></p></div>"
+  },
+  "ar": {
+    "doc": {
+      "schemaVersion": 1,
+      "root": {
+        "type": "root",
+        "direction": "ltr",
+        "format": "",
+        "indent": 0,
+        "version": 1,
+        "children": [
+          {
+            "type": "heading",
+            "tag": "h2",
+            "direction": "rtl",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "children": [
+              {
+                "type": "text",
+                "text": "مرحبا بكم",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "direction": "rtl",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "textFormat": 0,
+            "textStyle": "",
+            "children": [
+              {
+                "type": "text",
+                "text": "نص ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": "عريض",
+                "format": 1,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": " و",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "text",
+                "text": "مائل",
+                "format": 2,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "linebreak"
+              },
+              {
+                "type": "text",
+                "text": "سطر جديد",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "direction": "rtl",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "textFormat": 0,
+            "textStyle": "",
+            "children": [
+              {
+                "type": "text",
+                "text": "اقرأ ",
+                "format": 0,
+                "detail": 0,
+                "mode": "normal",
+                "style": "",
+                "version": 1
+              },
+              {
+                "type": "link",
+                "direction": "rtl",
+                "format": "",
+                "indent": 0,
+                "version": 1,
+                "fields": {
+                  "linkType": "internal",
+                  "newTab": false,
+                  "doc": {
+                    "relationTo": "entry",
+                    "value": "e2"
+                  }
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "الأسعار",
+                    "format": 0,
+                    "detail": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "version": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "list",
+            "listType": "number",
+            "tag": "ol",
+            "start": 2,
+            "direction": "rtl",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "children": [
+              {
+                "type": "listitem",
+                "value": 2,
+                "direction": "rtl",
+                "format": "",
+                "indent": 0,
+                "version": 1,
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "ثانيا",
+                    "format": 0,
+                    "detail": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "version": 1
+                  }
+                ]
+              },
+              {
+                "type": "listitem",
+                "value": 3,
+                "direction": "rtl",
+                "format": "",
+                "indent": 0,
+                "version": 1,
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "ثالثا",
+                    "format": 0,
+                    "detail": 0,
+                    "mode": "normal",
+                    "style": "",
+                    "version": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "upload",
+            "relationTo": "media",
+            "value": "med_1",
+            "fields": {
+              "alt": "صورة \"المنتج\""
+            }
+          },
+          {
+            "type": "paragraph",
+            "direction": "ltr",
+            "format": "",
+            "indent": 0,
+            "version": 1,
+            "textFormat": 0,
+            "textStyle": "",
+            "children": []
+          }
+        ]
+      }
+    },
+    "html": "<div class=\"richtext\"><h2>مرحبا بكم</h2><p>نص <strong>عريض</strong> و<em>مائل</em><br />سطر جديد</p><p>اقرأ <a href=\"/pages/e2\">الأسعار</a></p><ol start=\"2\"><li>ثانيا</li><li>ثالثا</li></ol><img src=\"/media/med_1.png\" alt=\"صورة &quot;المنتج&quot;\" /><p><br /></p></div>"
+  }
+}

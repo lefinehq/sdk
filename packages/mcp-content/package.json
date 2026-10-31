@@ -1,0 +1,69 @@
+{
+  "name": "@better-i18n/mcp-content",
+  "version": "0.12.0",
+  "description": "MCP server for Better i18n content management - headless CMS with AI-powered content creation for Cursor, Claude, and other AI assistants",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "better-i18n-mcp-content": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/__tests__",
+    "package.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lefinehq/sdk.git",
+    "directory": "packages/mcp-content"
+  },
+  "homepage": "https://better-i18n.com",
+  "bugs": {
+    "url": "https://github.com/better-i18n/better-i18n/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "i18n",
+    "internationalization",
+    "translation",
+    "better-i18n",
+    "cursor",
+    "claude",
+    "ai",
+    "openai",
+    "codex",
+    "localization",
+    "cms",
+    "headless-cms",
+    "content"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node ./dist/index.js",
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "deploy": "npm run build && wrangler deploy -c wrangler.jsonc",
+    "prepublishOnly": "npm run clean && npm run build && chmod +x ./dist/index.js ./dist/http.js"
+  },
+  "dependencies": {
+    "@better-i18n/mcp-types": "^0.17.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@trpc/client": "^11.18.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "~5.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

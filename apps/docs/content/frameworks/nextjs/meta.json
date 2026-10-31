@@ -1,0 +1,13 @@
+{
+  "title": "Next.js",
+  "icon": "NextjsIcon",
+  "defaultOpen": false,
+  "pages": [
+    "index",
+    "configuration",
+    "middleware",
+    "client",
+    "selective-loading",
+    "api-reference"
+  ]
+}

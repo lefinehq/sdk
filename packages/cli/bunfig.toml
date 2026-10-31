@@ -1,0 +1,3 @@
+[test]
+# No test may open a real browser (a run once opened its fake approval links in Ali's browser).
+preload = ["./src/test-setup.ts"]

@@ -1,0 +1,284 @@
+---
+title: Better Auth
+description: Translate Better Auth error messages with CDN-based localization
+---
+
+`@better-i18n/server/providers/better-auth` creates a [Better Auth](https://www.better-auth.com/) plugin that automatically translates error messages (like "Invalid email or password") into your users' language — fetched from the CDN at runtime.
+
+<Callout type="info">
+  **No redeployment needed.** Unlike bundled localization packages, translations are served from the Lefine CDN. Add a new language or fix a typo from the dashboard — it's live within 60 seconds.
+</Callout>
+
+## Setup
+
+<Steps>
+
+<Step>
+### Install the package
+
+<Tabs groupId="pkg" items={["bun", "npm", "pnpm", "yarn"]}>
+  <Tab value="bun">
+    ```bash
+    bun add @better-i18n/server
+    ```
+  </Tab>
+  <Tab value="npm">
+    ```bash
+    npm install @better-i18n/server
+    ```
+  </Tab>
+  <Tab value="pnpm">
+    ```bash
+    pnpm add @better-i18n/server
+    ```
+  </Tab>
+  <Tab value="yarn">
+    ```bash
+    yarn add @better-i18n/server
+    ```
+  </Tab>
+</Tabs>
+</Step>
+
+<Step>
+### Create the i18n singleton
+
+This instance is shared between Better Auth and your server middleware (Hono, Express, etc.) — one CDN cache for everything.
+
+```ts title="src/i18n.ts"
+import { createServerI18n } from "@better-i18n/server";
+
+export const i18n = createServerI18n({
+  projectId: "my-org/my-project", // your Lefine project
+  defaultLocale: "en",
+});
+```
+</Step>
+
+<Step>
+### Add the provider to Better Auth
+
+```ts title="src/auth.ts"
+import { betterAuth } from "better-auth";
+import { createBetterAuthProvider } from "@better-i18n/server/providers/better-auth"; // [!code highlight]
+import { i18n } from "./i18n";
+
+export const auth = betterAuth({
+  // ...your config
+  plugins: [
+    createBetterAuthProvider(i18n), // [!code highlight]
+    // ...other plugins
+  ],
+});
+```
+
+That's it. The provider hooks into every Better Auth error response, detects the locale from the `Accept-Language` header, and translates the error message.
+</Step>
+
+<Step>
+### Add translations in the dashboard
+
+1. Go to your project in [Lefine](https://better-i18n.com)
+2. Create a namespace called **`auth`**
+3. Add translation keys matching Better Auth error codes (e.g., `INVALID_EMAIL_OR_PASSWORD`)
+4. Translate into your target languages
+5. **Publish** — translations are live instantly
+
+<Callout type="tip">
+  **Seed keys with AI.** Use the Lefine MCP server to bulk-create all default keys in one prompt:
+
+  > Create all keys from Better Auth's core error codes in the "auth" namespace. The keys are: INVALID_EMAIL_OR_PASSWORD, USER_NOT_FOUND, EMAIL_NOT_VERIFIED, SESSION_EXPIRED, PASSWORD_TOO_SHORT, PASSWORD_TOO_LONG, USER_ALREADY_EXISTS, INVALID_TOKEN, TOKEN_EXPIRED, ACCOUNT_NOT_FOUND. Set English values to their default messages.
+</Callout>
+</Step>
+
+</Steps>
+
+## How It Works
+
+When Better Auth returns an error (e.g., invalid login), the provider:
+
+1. **Detects** if the response is an `APIError` with a `body.code` (e.g., `INVALID_EMAIL_OR_PASSWORD`)
+2. **Resolves** the user's locale from the `Accept-Language` header
+3. **Fetches** translations from the CDN — all namespaces are served in a single `translations.json` per locale, and the provider scopes to the `auth` namespace automatically
+4. **Replaces** `body.message` with the translated string
+
+If a translation is missing, the original English message is preserved and a warning is logged — auth never breaks because of a missing translation.
+
+```
+Client (Accept-Language: tr) → Better Auth → APIError
+  → Provider: detectLocale("tr")
+  → CDN: /{org}/{project}/tr/translations.json → { "auth": { "INVALID_EMAIL_OR_PASSWORD": "..." } }
+  → Response: { "code": "INVALID_EMAIL_OR_PASSWORD", "message": "Geçersiz e-posta veya şifre" }
+```
+
+<Callout type="info">
+  Translations are cached in memory (60s TTL). After the first request, subsequent lookups are instant — no extra CDN calls per auth error.
+</Callout>
+
+## Locale Detection
+
+By default, the provider reads the `Accept-Language` header. For most apps, you'll want cookie-based detection instead — it uses the locale the user actually chose in your app, not their browser/OS language.
+
+### Cookie-based (recommended)
+
+Pair with the provider's [`localeCookie`](/frameworks/provider#locale-persistence) prop — same cookie name on both sides:
+
+```ts title="src/auth.ts"
+createBetterAuthProvider(i18n, {
+  localeCookie: "locale", // [!code highlight]
+  // reads the "locale" cookie from the request
+  // falls back to Accept-Language if cookie is missing
+})
+```
+
+```tsx title="src/App.tsx"
+// Client writes the cookie automatically:
+<BetterI18nProvider localeCookie> {/* default cookie name: "locale" */}
+  <App />
+</BetterI18nProvider>
+```
+
+### Custom callback
+
+For advanced cases (database, user profile, custom header):
+
+```ts title="src/auth.ts"
+createBetterAuthProvider(i18n, {
+  getLocale: async ({ headers }) => { // [!code highlight]
+    const userId = getUserIdFromSession(headers);
+    return await db.users.getLocale(userId) ?? "en";
+  },
+})
+```
+
+## Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `namespace` | `string` | `"auth"` | CDN namespace for auth translations |
+| `localeCookie` | `string` | — | Cookie name to read locale from (pairs with provider's `localeCookie` prop) |
+| `getLocale` | `(ctx) => string \| Promise<string>` | Accept-Language detection | Custom locale resolver (overrides all other detection) |
+| `warnOnMissingKeys` | `boolean` | `true` | Log warnings for untranslated error codes |
+
+<Callout type="info">
+  **Detection priority:** `getLocale` callback > `localeCookie` > `Accept-Language` header > `defaultLocale`
+</Callout>
+
+## Default Error Codes
+
+The provider exports `DEFAULT_AUTH_KEYS` — all Better Auth core error codes with English defaults. Create these keys in your project's `auth` namespace, then translate them from the dashboard.
+
+<Callout type="tip">
+  **Seed all keys with AI.** Copy the prompt below into Claude, ChatGPT, or any AI agent with the [Lefine MCP server](/mcp) connected:
+
+  > Import all Better Auth error codes into my project's "auth" namespace using `DEFAULT_AUTH_KEYS` from `@better-i18n/server/providers/better-auth`. Create all 48 keys with their English defaults, then translate them into my project's target languages.
+</Callout>
+
+### Full Key Reference (48 keys)
+
+| Key | Default English Message |
+|-----|------------------------|
+| **Authentication** | |
+| `INVALID_EMAIL_OR_PASSWORD` | Invalid email or password |
+| `INVALID_PASSWORD` | Invalid password |
+| `INVALID_EMAIL` | Invalid email |
+| `INVALID_TOKEN` | Invalid token |
+| `TOKEN_EXPIRED` | Token expired |
+| `EMAIL_NOT_VERIFIED` | Email not verified |
+| `EMAIL_ALREADY_VERIFIED` | Email is already verified |
+| `EMAIL_MISMATCH` | Email mismatch |
+| **User Management** | |
+| `USER_NOT_FOUND` | User not found |
+| `USER_ALREADY_EXISTS` | User already exists. |
+| `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL` | User already exists. Use another email. |
+| `INVALID_USER` | Invalid user |
+| `USER_EMAIL_NOT_FOUND` | User email not found |
+| `USER_ALREADY_HAS_PASSWORD` | User already has a password. Provide that to delete the account. |
+| `FAILED_TO_CREATE_USER` | Failed to create user |
+| `FAILED_TO_UPDATE_USER` | Failed to update user |
+| `FAILED_TO_GET_USER_INFO` | Failed to get user info |
+| **Session** | |
+| `SESSION_EXPIRED` | Session expired. Re-authenticate to perform this action. |
+| `SESSION_NOT_FRESH` | Session is not fresh |
+| `FAILED_TO_CREATE_SESSION` | Failed to create session |
+| `FAILED_TO_GET_SESSION` | Failed to get session |
+| **Password** | |
+| `PASSWORD_TOO_SHORT` | Password too short |
+| `PASSWORD_TOO_LONG` | Password too long |
+| `PASSWORD_ALREADY_SET` | User already has a password set |
+| `CREDENTIAL_ACCOUNT_NOT_FOUND` | Credential account not found |
+| **Account & Social** | |
+| `ACCOUNT_NOT_FOUND` | Account not found |
+| `SOCIAL_ACCOUNT_ALREADY_LINKED` | Social account already linked |
+| `LINKED_ACCOUNT_ALREADY_EXISTS` | Linked account already exists |
+| `FAILED_TO_UNLINK_LAST_ACCOUNT` | You can't unlink your last account |
+| `PROVIDER_NOT_FOUND` | Provider not found |
+| `ID_TOKEN_NOT_SUPPORTED` | id_token not supported |
+| **Email Verification** | |
+| `VERIFICATION_EMAIL_NOT_ENABLED` | Verification email isn't enabled |
+| `EMAIL_CAN_NOT_BE_UPDATED` | Email can not be updated |
+| `FAILED_TO_CREATE_VERIFICATION` | Unable to create verification |
+| **URL Validation** | |
+| `INVALID_ORIGIN` | Invalid origin |
+| `INVALID_CALLBACK_URL` | Invalid callbackURL |
+| `INVALID_REDIRECT_URL` | Invalid redirectURL |
+| `INVALID_ERROR_CALLBACK_URL` | Invalid errorCallbackURL |
+| `INVALID_NEW_USER_CALLBACK_URL` | Invalid newUserCallbackURL |
+| `MISSING_OR_NULL_ORIGIN` | Missing or null Origin |
+| `CALLBACK_URL_REQUIRED` | callbackURL is required |
+| **Security** | |
+| `CROSS_SITE_NAVIGATION_LOGIN_BLOCKED` | Cross-site navigation login blocked. This request appears to be a CSRF attack. |
+| **Validation** | |
+| `VALIDATION_ERROR` | Validation Error |
+| `MISSING_FIELD` | Field is required |
+| `FIELD_NOT_ALLOWED` | Field not allowed to be set |
+| `ASYNC_VALIDATION_NOT_SUPPORTED` | Async validation is not supported |
+| `BODY_MUST_BE_AN_OBJECT` | Body must be an object |
+| `METHOD_NOT_ALLOWED_DEFER_SESSION_REQUIRED` | POST method requires deferSessionRefresh to be enabled in session config |
+
+You can also access these programmatically:
+
+```ts
+import { DEFAULT_AUTH_KEYS } from "@better-i18n/server/providers/better-auth";
+
+// 40+ keys with English defaults
+Object.entries(DEFAULT_AUTH_KEYS).forEach(([key, message]) => {
+  console.log(`${key}: ${message}`);
+});
+```
+
+<Callout type="info">
+  This table covers Better Auth **core** error codes. Plugin-specific codes (admin, two-factor, email-otp, organization) can be added as additional keys in your namespace.
+</Callout>
+
+## Sharing with Hono Middleware
+
+The `i18n` singleton is designed to be shared. Use the same instance for both Better Auth and your Hono API:
+
+```ts title="src/app.ts"
+import { Hono } from "hono";
+import { betterI18n } from "@better-i18n/server/hono";
+import { i18n } from "./i18n"; // same singleton // [!code highlight]
+
+const app = new Hono<{
+  Variables: { locale: string; t: Translator };
+}>();
+
+app.use("*", betterI18n(i18n)); // Hono routes get c.get("t") // [!code highlight]
+
+// Better Auth also uses the same i18n → shared CDN cache, zero extra fetches
+```
+
+## Related
+
+<Cards>
+  <Card title="Hono Middleware" icon="Layers" href="/frameworks/server-sdk/hono">
+    Use the same i18n singleton with Hono for API response translations.
+  </Card>
+  <Card title="Express & Node.js" icon="Server" href="/frameworks/server-sdk/node">
+    Node.js adapter for Express, Fastify, and Koa.
+  </Card>
+  <Card title="API Reference" icon="FileCode" href="/frameworks/server-sdk/api-reference">
+    Full reference for `createServerI18n`, `Translator`, and options.
+  </Card>
+</Cards>

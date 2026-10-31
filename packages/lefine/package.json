@@ -1,0 +1,133 @@
+{
+  "name": "lefine",
+  "version": "0.8.0",
+  "description": "Lefine for your app: strings and content from the Lefine edge, an ICU runtime under 2 KB, and the lefine CLI",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "lefine": "./dist/cli.js"
+  },
+  "exports": {
+    "./strings": {
+      "types": "./dist/strings/index.d.ts",
+      "default": "./dist/strings/index.js"
+    },
+    "./content": {
+      "types": "./dist/content/index.d.ts",
+      "default": "./dist/content/index.js"
+    },
+    "./content/config": {
+      "types": "./dist/content/config.d.ts",
+      "default": "./dist/content/config.js"
+    },
+    "./content/media": {
+      "types": "./dist/content/media.d.ts",
+      "default": "./dist/content/media.js"
+    },
+    "./content/live-preview": {
+      "types": "./dist/content/live-preview.d.ts",
+      "default": "./dist/content/live-preview.js"
+    },
+    "./content/live-preview/react": {
+      "types": "./dist/content/refresh-on-save.d.ts",
+      "default": "./dist/content/refresh-on-save.js"
+    },
+    "./content/vue": {
+      "types": "./dist/content/vue.d.ts",
+      "default": "./dist/content/vue.js"
+    },
+    "./content/react": {
+      "types": "./dist/content/react.d.ts",
+      "default": "./dist/content/react.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./next": {
+      "types": "./dist/next/index.d.ts",
+      "default": "./dist/next/index.js"
+    },
+    "./next/link": {
+      "types": "./dist/next/link.d.ts",
+      "default": "./dist/next/link.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./compile": {
+      "types": "./dist/strings/compile.d.ts",
+      "default": "./dist/strings/compile.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lefinehq/sdk.git",
+    "directory": "packages/lefine"
+  },
+  "homepage": "https://lefine.ai",
+  "keywords": [
+    "lefine",
+    "i18n",
+    "icu",
+    "nextjs",
+    "react",
+    "cms",
+    "localization",
+    "cli"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && bun scripts/build-cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --root ../.. packages/lefine",
+    "check:package": "bunx publint@0.3.25 --strict && bunx @arethetypeswrong/cli@0.18.5 --pack . --profile esm-only",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "next": ">=15.0.0",
+    "react": ">=18.0.0",
+    "typescript": ">=5.0.0",
+    "vue": ">=3.3.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@formatjs/icu-messageformat-parser": "^3.5.3",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.3.0",
+    "intl-messageformat": "^11.2.0",
+    "jsdom": "^27.4.0",
+    "next": "^15.5.25",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "~5.9.3",
+    "vue": "3.5.44"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

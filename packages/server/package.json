@@ -1,0 +1,83 @@
+{
+  "name": "@better-i18n/server",
+  "version": "0.5.0",
+  "description": "Framework-agnostic server-side i18n for Better i18n (Hono, Express, Fastify)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lefinehq/sdk.git",
+    "directory": "packages/server"
+  },
+  "bugs": {
+    "url": "https://github.com/better-i18n/better-i18n/issues"
+  },
+  "homepage": "https://github.com/better-i18n/better-i18n/tree/main/packages/server",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./hono": {
+      "types": "./dist/hono.d.ts",
+      "default": "./dist/hono.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./providers/better-auth": {
+      "types": "./dist/providers/better-auth.d.ts",
+      "default": "./dist/providers/better-auth.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "i18n",
+    "localization",
+    "internationalization",
+    "hono",
+    "express",
+    "fastify",
+    "server",
+    "middleware",
+    "better-auth",
+    "auth",
+    "localization"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "bun run build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@better-i18n/core": "workspace:*",
+    "use-intl": ">=4.14.5"
+  },
+  "peerDependencies": {
+    "hono": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "hono": "^4.13.8",
+    "typescript": "~5.9.2",
+    "vitest": "^3.0.0"
+  }
+}

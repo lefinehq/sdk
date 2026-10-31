@@ -1,0 +1,85 @@
+{
+  "name": "@better-i18n/root",
+  "version": "0.0.0",
+  "packageManager": "bun@1.2.21",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "tests/*"
+  ],
+  "scripts": {
+    "lint": "eslint --cache --report-unused-disable-directives .",
+    "test": "bun run test:vitest && bun run test:bun",
+    "test:vitest": "vitest run",
+    "test:bun": "bun test ./packages/cli/src ./packages/expo/src",
+    "typecheck": "tsc --build",
+    "build": "bun run build:packages",
+    "build:packages": "for dir in packages/*; do (cd \"$dir\" && [ -f package.json ] && bun run build 2>/dev/null || true); done",
+    "release": "bun scripts/release.ts",
+    "verify:published": "bun scripts/verify-published.ts",
+    "check:public": "bun scripts/check-public.ts",
+    "snapshot:public": "bun scripts/public-snapshot.ts",
+    "version-packages": "bunx changeset version && bun update",
+    "docs:dev": "bun --filter docs dev",
+    "docs:build": "bun --filter docs build",
+    "docs:deploy": "bun --filter docs deploy",
+    "link-all": "for dir in packages/*; do (cd \"$dir\" && bun link); done",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.31.1",
+    "@eslint/js": "^9.39.5",
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/parser": "^8.71.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^16.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "nodemailer": "^7.0.13",
+    "prettier": "^3.9.9",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "~3.2.7",
+    "zod": "^4.6.5"
+  },
+  "prettier": {
+    "printWidth": 80,
+    "tabWidth": 2,
+    "useTabs": false,
+    "semi": true,
+    "singleQuote": false,
+    "quoteProps": "as-needed",
+    "jsxSingleQuote": false,
+    "trailingComma": "all",
+    "bracketSpacing": true,
+    "bracketSameLine": false,
+    "arrowParens": "always",
+    "endOfLine": "lf"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs}": [
+      "bunx eslint --max-warnings=0 --report-unused-disable-directives"
+    ],
+    "*": [
+      "bunx prettier --check --ignore-unknown"
+    ]
+  },
+  "overrides": {
+    "@types/react": "^19.0.0",
+    "vite": "~7.1.5",
+    "i18next": "^24.0.0"
+  },
+  "dependencies": {
+    "@better-i18n/mcp-types": "workspace:*",
+    "highlight.js": "^11.12.0",
+    "marked-highlight": "^2.2.4"
+  }
+}

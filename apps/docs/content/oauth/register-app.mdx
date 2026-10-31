@@ -1,0 +1,58 @@
+---
+title: Register Your App
+description: Get a client_id to start integrating with Lefine OAuth 2.0.
+---
+
+## How registration works
+
+OAuth applications are registered by the Lefine team during partner onboarding. We create the application record in our database with your app's details and send you back a `client_id`.
+
+<Callout type="info">
+**Self-service registration is coming soon.** For now, reach out to us at [partners@better-i18n.com](mailto:partners@better-i18n.com) or through your existing contact to get started.
+</Callout>
+
+## What we need from you
+
+| Field | Description |
+|-------|-------------|
+| **App name** | What users see on the consent screen |
+| **Icon URL** | Square PNG or SVG, ≥ 64×64 (optional but recommended) |
+| **Redirect URIs** | Where we send users after authorization. Byte-for-byte match required at exchange time. HTTPS required in production; `http://localhost` is allowed for development. Send the full list (prod + every dev port). |
+| **Application type** | `web` (server-side), `native` (desktop/mobile), or `spa` (browser-only). All types use PKCE; the field is informational only. |
+
+## What you'll receive
+
+- A **`client_id`** — your app's unique identifier
+- A **`client_secret`** — a secret key your server uses during token exchange and refresh
+
+<Callout type="warn">
+**Store your `client_secret` securely — server-side only.** Treat it like a database password. Never embed it in browser bundles, mobile binaries, environment files committed to Git, or public repos. If compromised, contact us immediately — we'll rotate it and invalidate existing tokens.
+</Callout>
+
+<Callout type="info">
+**SPA or native apps** that cannot safely store a secret may request a PKCE-only public client instead. Contact us during onboarding to discuss your architecture. Server-side applications always use `client_secret`.
+</Callout>
+
+## What you'll need on your side
+
+- A redirect URI endpoint (e.g., `https://yourapp.com/oauth/callback`)
+- A backend to handle the callback and store `client_secret`, `refresh_token`, and `grant_id` securely
+- Your `client_secret` available as an environment variable (e.g., `BETTER_I18N_CLIENT_SECRET`)
+
+<Callout type="info">
+**Local development**: Include the **dev callback for your app** in your redirect URIs (e.g., `http://localhost:3000/oauth/callback`). HTTP without TLS is allowed for `localhost` only. The Lefine side you're calling against is `http://localhost:5173` if you're running our dashboard locally — see [Local development](/oauth/local-development).
+</Callout>
+
+## Dynamic Client Registration (advanced)
+
+If your platform programmatically provisions integrations, we support [RFC 7591 Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591) at:
+
+```
+POST https://api.better-i18n.com/api/auth/mcp/register
+```
+
+This endpoint is rate-limited and requires prior arrangement. Contact us if you need automated registration.
+
+## Next step
+
+Once you have a `client_id`, [start the authorization flow](/oauth/authorization-flow).

@@ -1,0 +1,5 @@
+{
+  "welcome": "Willkommen, {name}!",
+  "nav": { "save": "Speichern", "cancel": "Abbrechen" },
+  "items": "{\"one\":\"{count} Artikel\",\"other\":\"{count} Artikel\"}"
+}

@@ -1,0 +1,217 @@
+---
+title: Setup
+description: Installation and provider setup for Vite + React applications
+---
+
+This guide walks you through installing Lefine and setting up the provider in your Vite + React application.
+
+## Installation
+
+<Tabs items={['npm', 'yarn', 'pnpm', 'bun']}>
+  <Tab value="npm">
+  ```bash
+  npm install @better-i18n/use-intl @better-i18n/vite use-intl
+  ```
+  </Tab>
+  <Tab value="yarn">
+  ```bash
+  yarn add @better-i18n/use-intl @better-i18n/vite use-intl
+  ```
+  </Tab>
+  <Tab value="pnpm">
+  ```bash
+  pnpm add @better-i18n/use-intl @better-i18n/vite use-intl
+  ```
+  </Tab>
+  <Tab value="bun">
+  ```bash
+  bun add @better-i18n/use-intl @better-i18n/vite use-intl
+  ```
+  </Tab>
+</Tabs>
+
+## Configuration
+
+### Step 1: Add the Vite Plugin
+
+Configure `@better-i18n/vite` in your Vite config. This is the **single source of truth** for your project — no need to repeat it in the provider.
+
+```ts title="vite.config.ts"
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { betterI18n } from '@better-i18n/vite' // [!code ++]
+
+export default defineConfig({
+  plugins: [
+    betterI18n({ projectId: 'your-org/your-project' }), // [!code ++]
+    react(),
+  ],
+})
+```
+
+The plugin fetches translations **server-side** (in the Vite dev server or at build time) and injects them into your HTML as a `<script>` tag. No client-side CDN requests, no FOUC.
+
+### Step 2: Setup Provider
+
+Wrap your app with `BetterI18nProvider` — no props needed:
+
+```tsx title="src/App.tsx"
+import { BetterI18nProvider, LocaleDropdown } from '@better-i18n/use-intl' // [!code ++]
+
+function App() {
+  return (
+    <BetterI18nProvider> // [!code ++]
+      <Header />
+      <Router />
+    </BetterI18nProvider> // [!code ++]
+  )
+}
+
+function Header() {
+  return (
+    <header>
+      <LocaleDropdown /> {/* Works out of the box */}
+    </header>
+  )
+}
+
+export default App
+```
+
+The provider automatically reads `project`, `locale`, and `messages` from the plugin-injected `<script>` tag. You can still pass props explicitly — they take precedence over injected data.
+
+<Callout type="info">
+  Without the Vite plugin, `project` and `locale` props are **required**. The provider will
+  fetch translations from CDN on mount, which causes a brief flash of untranslated content
+  on the first render.
+</Callout>
+
+### BetterI18nProvider Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `project` | `string` | With plugin: No | Project identifier (`org/project`). Auto-read from plugin. |
+| `locale` | `string` | With plugin: No | Current locale. Auto-detected by plugin. |
+| `messages` | `Messages` | No | Pre-loaded translations (auto-injected by plugin) |
+| `onLocaleChange` | `(locale: string) => void` | No | Called when user switches language via `setLocale()` |
+| `timeZone` | `string` | No | IANA timezone |
+| `now` | `Date` | No | Pin current time (for testing or SSR consistency) |
+| `storage` | `TranslationStorage` | No | Persistent translation cache adapter |
+| `fetchTimeout` | `number` | No | CDN fetch timeout in ms (default: `10000`) |
+| `retryCount` | `number` | No | Retry attempts on CDN failure (default: `1`) |
+
+### Vite Plugin Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `project` | `string` | Yes | Project identifier (`org/project`) |
+| `defaultLocale` | `string` | No | Fallback locale (default: `"en"`) |
+| `localeCookie` | `string` | No | Cookie name for locale persistence (default: `"locale"`) |
+| `cdnBaseUrl` | `string` | No | CDN base URL override |
+
+### Step 3: Add Loading State
+
+With the Vite plugin, the provider reads all config from the injected `<script>` tag — no props needed:
+
+```tsx title="src/App.tsx"
+import { BetterI18nProvider } from '@better-i18n/use-intl' // [!code ++]
+import { Suspense } from 'react' // [!code ++]
+
+function App() {
+  return (
+    <Suspense fallback={<LoadingScreen />}> // [!code ++]
+      <BetterI18nProvider> // [!code ++]
+        <Router />
+      </BetterI18nProvider> // [!code ++]
+    </Suspense> // [!code ++]
+  )
+}
+
+function LoadingScreen() {
+  return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+    </div>
+  )
+}
+```
+
+## Using Translations
+
+### Basic Usage
+
+```tsx title="src/pages/HomePage.tsx"
+import { useTranslations } from '@better-i18n/use-intl'
+
+export function HomePage() {
+  const t = useTranslations('home')
+
+  return (
+    <div>
+      <h1>{t('title')}</h1>
+      <p>{t('description')}</p>
+    </div>
+  )
+}
+```
+
+### With Variables
+
+```tsx
+function WelcomeMessage({ user }) {
+  const t = useTranslations('greeting')
+
+  return (
+    <p>{t('hello', { name: user.name, count: user.notifications })}</p>
+  )
+}
+```
+
+### Formatting
+
+```tsx
+import { useFormatter } from '@better-i18n/use-intl'
+
+function OrderSummary({ order }) {
+  const format = useFormatter()
+
+  return (
+    <div>
+      <p>Total: {format.number(order.total, { style: 'currency', currency: 'USD' })}</p>
+      <p>Date: {format.dateTime(order.date, { dateStyle: 'long' })}</p>
+      <p>Items: {format.list(order.items, { type: 'conjunction' })}</p>
+    </div>
+  )
+}
+```
+
+## Performance Tips
+
+<Cards>
+  <Card title="Use the Vite Plugin" icon="Zap">
+    The `@better-i18n/vite` plugin embeds translations in the HTML at build time — zero client-side CDN requests and no FOUC.
+  </Card>
+  <Card title="Preload Translations" icon="Download">
+    If not using the plugin, preload messages in your HTML:
+    ```html
+    <link rel="preload" href="https://cdn.better-i18n.com/org/project/en/translations.json" as="fetch" crossorigin>
+    ```
+  </Card>
+  <Card title="Cache in Service Worker" icon="Database">
+    For offline support, cache translation files in a service worker.
+  </Card>
+</Cards>
+
+## Next Steps
+
+<Cards>
+  <Card title="Client-Side Features" icon="Zap" href="/frameworks/vite/client">
+    Language switcher components, `useLocale`, and locale persistence.
+  </Card>
+  <Card title="React Router" icon="Route" href="/frameworks/vite/react-router">
+    Integrate with React Router for URL-based locales.
+  </Card>
+  <Card title="TypeScript" icon="FileCode" href="/frameworks/vite/typescript">
+    Enable type-safe translation keys.
+  </Card>
+</Cards>

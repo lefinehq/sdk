@@ -1,0 +1,20 @@
+msgid ""
+msgstr ""
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: POEditor.com\n"
+"Project-Id-Version: Spot\n"
+"Language: ja\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. translators: This is part of a contextual menu attached to a single track; this entry allows viewing the album containing a specific track.
+#: src/app/components/labels.rs:5
+msgid "View album"
+msgstr "アルバムを見る"
+
+#. translators: This is part of a contextual menu attached to a single track; the full text is "More from <artist>".
+#: src/app/components/labels.rs:39
+#, fuzzy
+msgid "More from {}"
+msgstr "詳細"

@@ -1,0 +1,269 @@
+import { cache } from "react";
+import { getRequestConfig } from "next-intl/server";
+import { VERSION_PATTERN, createI18nCore } from "@better-i18n/core";
+import type { I18nCore } from "@better-i18n/core";
+
+import { normalizeConfig } from "./config.js";
+import type { I18nConfig, NextFetchRequestInit } from "./types.js";
+
+/**
+ * Per-request locale cache using React's `cache()`.
+ * The first getRequestConfig call resolves requestLocale (e.g. "tr" from middleware).
+ * The second call in the same request may receive undefined — this cache bridges them.
+ */
+const getRequestLocaleCache = cache(() => ({ locale: undefined as string | undefined }));
+
+/**
+ * Next.js i18n core instance with ISR support.
+ * Inherits full `I18nCore` interface including namespace-aware `getMessages`.
+ */
+export type NextI18nCore = I18nCore;
+
+/** Cache tags the webhook handler (`./revalidate.ts`) revalidates by default. */
+export const MANIFEST_CACHE_TAG = "i18n-manifest";
+export const MESSAGES_CACHE_TAG = "i18n-messages";
+
+/**
+ * `true` for an immutable snapshot URL, `{base}/v/{version}/…`. Its content
+ * never changes, so it is cached without a revalidation window.
+ */
+const isSnapshotUrl = (input: RequestInfo | URL): boolean => {
+  try {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const segments = new URL(url).pathname.split("/");
+    const i = segments.lastIndexOf("v", segments.length - 3);
+    return i !== -1 && VERSION_PATTERN.test(segments[i + 1] ?? "");
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Create a fetch function with Next.js data-cache revalidation.
+ *
+ * Every request carries `tags`, so `revalidateTag()` (the webhook) really
+ * drops the entry. Snapshot URLs (`/v/{version}/`) are immutable and are
+ * cached with `revalidate: false`; only the manifest has a short window.
+ */
+export const createIsrFetch = (
+  revalidateSeconds: number,
+  tags: string[],
+): typeof fetch => {
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    // Strip `cache` from init — Next.js throws if both `cache` and
+    // `next.revalidate` are set. ISR revalidation takes ownership of caching.
+    const { cache: _cache, ...restInit } = init ?? {};
+    const nextInit: NextFetchRequestInit = {
+      ...restInit,
+      next: {
+        revalidate: isSnapshotUrl(input) ? false : revalidateSeconds,
+        tags,
+      },
+    };
+    return fetch(input, nextInit);
+  };
+};
+
+/**
+ * Create a Next.js i18n core instance with ISR support
+ *
+ * This wraps the framework-agnostic `createI18nCore` from `@better-i18n/core`
+ * and adds Next.js-specific ISR revalidation for optimal caching.
+ *
+ * @example
+ * ```ts
+ * const i18n = createNextI18nCore({
+ *   project: 'acme/dashboard',
+ *   defaultLocale: 'en',
+ * })
+ *
+ * // Manifest cached for 60s (ISR), tag `i18n-manifest`
+ * const locales = await i18n.getLocales()
+ *
+ * // Messages revalidated every 30s (ISR)
+ * const messages = await i18n.getMessages('en')
+ * ```
+ */
+export const createNextI18nCore = (config: I18nConfig): NextI18nCore => {
+  const normalized = normalizeConfig(config);
+
+  // Shared core fields (everything except fetch, which differs per use-case)
+  const coreFields = {
+    project: normalized.project,
+    defaultLocale: normalized.defaultLocale,
+    cdnBaseUrl: normalized.cdnBaseUrl,
+    manifestCacheTtlMs: normalized.manifestCacheTtlMs,
+    debug: normalized.debug,
+    logLevel: normalized.logLevel,
+    storage: normalized.storage,
+    staticData: normalized.staticData,
+    fetchTimeout: normalized.fetchTimeout,
+    retryCount: normalized.retryCount,
+    namespaces: normalized.namespaces,
+  };
+
+  // Core instance uses ISR fetch for manifest (default 60s)
+  const manifestFetch = createIsrFetch(normalized.manifestRevalidateSeconds, [MANIFEST_CACHE_TAG]);
+  const i18nCore = createI18nCore({ ...coreFields, fetch: manifestFetch });
+
+  // Messages use separate ISR fetch with shorter revalidation (default 30s)
+  const messagesFetch = createIsrFetch(normalized.messagesRevalidateSeconds, [MESSAGES_CACHE_TAG]);
+  const messagesCore = createI18nCore({ ...coreFields, fetch: messagesFetch });
+
+  return {
+    ...i18nCore,
+    getMessages: (locale: string, options?: { namespaces?: string[] }) =>
+      messagesCore.getMessages(locale, options),
+  };
+};
+
+/**
+ * Resolve the active locale from request context.
+ *
+ * Pure helper — no Next.js runtime deps, easy to unit-test.
+ *
+ * Cookie fallback is ONLY used in "never" mode where cookie is the source of
+ * truth. In URL-based modes ("always" / "as-needed") requestLocale undefined
+ * (ISR revalidation, build-time static generation) must NOT fall back to cookie
+ * — otherwise a stale cookie overrides the URL locale.
+ */
+export function resolveLocaleFromRequest(
+  requestLocale: string | undefined,
+  cookieLocale: string | null | undefined,
+  cachedLocale: string | null | undefined,
+  locales: string[],
+  defaultLocale: string,
+  localePrefix: "always" | "as-needed" | "never",
+): string {
+  let locale: string | undefined = requestLocale;
+
+  if (!locale) {
+    if (localePrefix === "never") {
+      // "never" mode: cookie is source of truth
+      if (cookieLocale && locales.includes(cookieLocale)) {
+        locale = cookieLocale;
+      }
+    } else {
+      // URL-based modes ("always" / "as-needed"): use per-request cached locale
+      // from the first getRequestConfig call. This covers cases where requestLocale
+      // is undefined (secondary render passes) without falling back to cookie
+      // — which could differ from the URL locale.
+      if (cachedLocale && locales.includes(cachedLocale)) {
+        locale = cachedLocale;
+      }
+    }
+  }
+
+  // Final fallback to defaultLocale
+  if (!locale || !locales.includes(locale)) {
+    locale = defaultLocale;
+  }
+
+  return locale;
+}
+
+/**
+ * Create next-intl request config for App Router
+ *
+ * @example
+ * ```ts
+ * // i18n/request.ts
+ * import { createNextIntlRequestConfig } from '@better-i18n/next/server'
+ *
+ * export default createNextIntlRequestConfig({
+ *   project: 'acme/dashboard',
+ *   defaultLocale: 'en',
+ * })
+ * ```
+ */
+export const createNextIntlRequestConfig = (config: I18nConfig) =>
+  getRequestConfig(async ({ requestLocale }) => {
+    const i18n = createNextI18nCore(config);
+    const normalized = normalizeConfig(config);
+    const locales = await i18n.getLocales();
+
+    const resolvedRequestLocale = await requestLocale;
+
+    // Per-request cache: the first getRequestConfig call receives requestLocale
+    // from middleware (e.g. "tr"). The second call in the same request may
+    // receive undefined. Cache bridges them so both resolve to the same locale.
+    const localeCache = getRequestLocaleCache();
+    if (resolvedRequestLocale && locales.includes(resolvedRequestLocale)) {
+      localeCache.locale = resolvedRequestLocale;
+    }
+    const cachedLocale = localeCache.locale;
+
+    let cookieLocale: string | null = null;
+
+    if (normalized.localePrefix === "never") {
+      // "never" mode: cookie is the source of truth
+      try {
+        const { cookies } = await import("next/headers");
+        const cookieStore = await cookies();
+        cookieLocale = cookieStore.get(normalized.cookieName)?.value ?? null;
+      } catch {
+        // cookies() throws in non-request contexts (e.g. build time)
+      }
+    }
+
+    const locale = resolveLocaleFromRequest(
+      resolvedRequestLocale,
+      cookieLocale,
+      cachedLocale,
+      locales,
+      normalized.defaultLocale,
+      normalized.localePrefix,
+    );
+
+    // Resolve timeZone: explicit config > runtime auto-detection.
+    // Setting this explicitly avoids next-intl's ENVIRONMENT_FALLBACK warning
+    // and prevents server/client hydration mismatches for date/time formatting.
+    const timeZone =
+      normalized.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    // Config-level namespaces flow through to core via normalized config.
+    // Per-call override is also possible: i18n.getMessages(locale, { namespaces: [...] })
+    return {
+      locale,
+      messages: await i18n.getMessages(locale),
+      timeZone,
+    };
+  });
+
+// Convenience exports for backwards compatibility
+
+/**
+ * Fetch manifest from CDN
+ */
+export const fetchManifest = (config: I18nConfig) =>
+  createNextI18nCore(config).getManifest();
+
+/**
+ * Get manifest with caching
+ */
+export const getManifest = (config: I18nConfig, options?: { forceRefresh?: boolean }) =>
+  createNextI18nCore(config).getManifest(options);
+
+/**
+ * Get available locale codes
+ */
+export const getLocales = (config: I18nConfig) =>
+  createNextI18nCore(config).getLocales();
+
+/**
+ * Get messages for a locale, optionally filtered to specific namespaces
+ */
+export const getMessages = (
+  config: I18nConfig,
+  locale: string,
+  options?: { namespaces?: string[] },
+) => createNextI18nCore(config).getMessages(locale, options);
+
+/**
+ * Get language options with metadata
+ */
+export const getManifestLanguages = (config: I18nConfig) =>
+  createNextI18nCore(config).getLanguages();
+
+// Re-export types from core
+export type { LanguageOption, ManifestLanguage, ManifestResponse, Messages } from "@better-i18n/core";

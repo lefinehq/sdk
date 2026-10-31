@@ -1,0 +1,241 @@
+# @better-i18n/mcp-content
+
+## 0.12.0
+
+### Minor Changes
+
+- Add `scheduleContentEntry` and `unscheduleContentEntry`. An entry can now be scheduled to publish at a future time (ISO 8601 with offset), optionally for some languages only, and the schedule can be cancelled. Entries with a pending schedule report it as `sch_at` (and `sch_langs`).
+
+### Patch Changes
+
+- Read validation messages from `ZodError.issues`. zod 4 removed `.errors`, so the packages no longer type-checked after the zod 4 upgrade. The block catalog tools in mcp-content are now typed on the client too.
+
+## 0.11.0
+
+### Minor Changes
+
+- Support `fieldConfig.multiple` for multi-valued relation fields. `addField`, `updateField`, and `createContentModel` now accept `multiple` in their `fieldConfig` schema (and advertise it in the tool JSON-Schema), so a relation can be created/updated as multi-valued via MCP. Previously the inline schemas only accepted `targetModel`, silently stripping `multiple` and creating single relations even though the platform API already supported it.
+
+## 0.10.0
+
+### Minor Changes
+
+- Add Block Catalog MCP tools (BETTER-246 / BETTER-247).
+
+  Six new tools for managing the per-project block catalog — code-first renderable
+  primitives (hero, feature grid, cover, FAQ, CTA) registered by the customer's SDK
+  and used by AI agents to compose content entries:
+  - `registerBlock` — upsert one block by (project, slug) with JSON Schema + metadata
+  - `bulkRegisterBlocks` — register up to 50 blocks atomically in one transaction
+  - `listBlocks` — browse the catalog with optional category/search filters
+  - `getBlock` — fetch a single block's full detail including paramsSchema
+  - `validateBlockParams` — dry-run validate block params against the stored schema
+  - `deleteBlock` — remove a block from the catalog (policies: strict/warn/orphan)
+
+  Only JSON Schema + metadata are stored — no customer render code enters Better.
+  Static PNG previews and optional iframe live previews are customer-hosted.
+
+  Paired with platform changes to `mcpContent` tRPC router and the new
+  `block_catalog` Postgres table.
+
+## 0.9.0
+
+### Minor Changes
+
+- Raise bulk content entry caps to unblock large agent batches: `bulkUpdateEntries` 20→200, `bulkCreateEntries` 20→200, `bulkPublishEntries` 50→500. Previous caps forced AI agents into many round trips for naturally one-shot workloads (e.g. "translate all 200 blog posts to Turkish"), costing tokens, latency, and breaking single-call partial-failure semantics. Partial failure reporting via `failed[]` is unchanged and now covers a wider slice of real workloads in one call.
+
+### Patch Changes
+
+- Add UTF-8 character encoding guardrail to MCP server instructions. Some AI agents (Codex observed in the wild) transliterate non-ASCII characters to ASCII (e.g., "öğretmen" → "ogretmen") during JSON string serialization, silently corrupting translations. Both MCP servers now prominently instruct agents to send non-ASCII characters as-is or use Unicode escape sequences, and mark transliteration as a client-side bug to fix. Also adds server-level instructions to `@better-i18n/mcp` (previously had none), including the phantom-keys incident guardrail (always `listKeys` before `createKeys`).
+
+## 0.8.6
+
+### Patch Changes
+
+- Warn AI agents when `bodyMarkdown` starts with a `# H1` heading. The entry title is already rendered as the page H1 — a duplicate heading degrades SEO and accessibility. The warning is returned in create, update, bulkCreate, and bulkUpdate responses.
+
+## 0.8.5
+
+### Patch Changes
+
+- Fix schema alignment between MCP content tools and platform API:
+  - **listContentEntries**: Map `modelSlug` input to `models` API field — filter was silently ignored since platform API refactor on Mar 30
+  - **createContentEntry**: Add `sourceLanguageCode` field; make translation `title` optional to match platform schema
+  - **create/update tools**: Remove non-base fields (`excerpt`, `featuredImage`, `tags`, `metaTitle`, `metaDescription`, `translationStatus`) from tool schemas — these are model-specific custom fields that belong in `customFields`, not top-level parameters
+
+## 0.8.4
+
+### Patch Changes
+
+- Improve MCP tool descriptions and add server-level instructions to prevent common AI agent errors: language vs missingLanguage filter confusion, missing pre-flight model existence check, localized custom field misuse, inefficient create-then-update patterns, and slug vs localized_slug confusion.
+
+## 0.8.3
+
+### Patch Changes
+
+- Improve tool descriptions to guide AI agents toward more effective usage patterns:
+  - All bodyMarkdown fields now warn against starting with # H1 (duplicate heading with page title)
+  - createContentEntry, updateContentEntry, publishContentEntry now explicitly route agents to bulk equivalents when working with 2+ entries
+  - bulkCreateEntries, bulkUpdateEntries, bulkPublishEntries now marked as the preferred tools with explicit "never loop single-entry tools" rules
+  - bulkUpdateEntries gains bodyMarkdown H1 warning and expanded workflow examples
+
+## 0.8.2
+
+### Patch Changes
+
+- fix: ensure mcp-types stays in devDependencies only
+
+## 0.8.1
+
+### Patch Changes
+
+- Improve MCP tool descriptions with workflow rules, safety warnings, and silent behavior documentation for better AI agent guidance
+
+## 0.8.0
+
+### Minor Changes
+
+- Add new tool parameters: searchLanguages, searchInBody, compact for listContentEntries; compact for getContentEntry; translationStatus for updateContentEntry. Update publishContentEntry terminology to "published".
+
+## 0.7.0
+
+### Minor Changes
+
+- feat: accept any JSON-serializable custom field values and bump mcp-types for per-language cfv support
+  - Extracted shared `customFieldsSchema` with JSON string preprocess for flexible custom field input
+  - Updated createContentEntry, updateContentEntry, and bulkCreateEntries to use the shared schema
+  - Bumped `@better-i18n/mcp-types` to ^0.15.3 for per-language `customFieldValues` in translations
+
+## 0.6.2
+
+### Patch Changes
+
+- feat: surface version update warning in tool responses for AI model visibility
+
+  The update notification is now injected into the first tool call response so that AI models (Claude, ChatGPT, etc.) can read it and inform the user. Previously, warnings were only sent via MCP logging messages and stderr, which most clients don't surface to users.
+
+## 0.6.1
+
+### Patch Changes
+
+- fix: normalize language codes to lowercase to prevent FK constraint violations
+
+  Language codes like `zh-Hant` and `pt-BR` are now automatically lowercased before API calls to match the database format. Affects createKeys, updateKeys, proposeLanguages, proposeLanguageEdits, publishTranslations, createContentEntry, updateContentEntry, and bulkCreateEntries tools.
+
+## 0.6.0
+
+### Minor Changes
+
+- feat(mcp-content): add bulkCreateEntries tool, includeBody support, and improved descriptions
+  - Add bulkCreateEntries tool for batch entry creation (max 20, partial success)
+  - Add includeBody param to createContentModel and updateContentModel tools
+  - Improve addField/updateField descriptions with enum, relation, and showInTable examples
+  - Enrich createContentModel description with comprehensive field examples
+
+## 0.5.3
+
+### Patch Changes
+
+- Fix build error caused by `excerpt` and other fields missing from `@better-i18n/mcp-types` input types
+
+  Use spread pattern with type assertion to forward all validated input fields to tRPC client,
+  making the MCP tool layer forward-compatible with future `mcp-types` schema additions.
+
+## 0.5.2
+
+### Patch Changes
+
+- Add expand parameter support and bump mcp-types dependency
+  - Bump @better-i18n/mcp-types to ^0.13.0 (fixes relation field type, adds expand support)
+  - Add `expand` parameter to getContentEntry and listContentEntries tools
+  - Enables MCP agents to resolve relation fields (e.g., author, category) with full entry data
+
+## 0.5.1
+
+### Patch Changes
+
+- Improve MCP tool descriptions for source language awareness and localized custom field values
+  - createContentEntry: Add source language guidance (check getProject 'sl' field), non-English example, clarify title/customFields are stored in source language
+  - updateContentEntry: Document metadata-only mode behavior for localized customFields, clarify source language auto-resolution
+  - getContentEntry: Document response structure for per-language custom field values (cfv, tr.{lang}.cfv)
+
+## 0.5.0
+
+### Minor Changes
+
+- feat: Add showInTable field option and tableSettings model parameter
+  - addField/updateField: new `showInTable` boolean in field options
+  - updateContentModel: new `tableSettings` parameter for base field column visibility
+
+## 0.4.0
+
+### Minor Changes
+
+- feat: Add enum field options support to MCP content tools
+  - `addField` and `updateField` now accept `options.enumValues` for defining enum choices (label + value pairs)
+  - `createContentModel` field definitions support `options.enumValues` for inline enum setup
+  - Updated README with field types reference table and enum usage examples
+
+## 0.3.0
+
+### Minor Changes
+
+- - Remove `user_select` field type — use `relation` with `fieldConfig.targetModel = 'users'` instead
+  - `updateContentEntry` now supports metadata-only mode (3rd mode: omit languageCode and translations)
+  - `listContentEntries` documents built-in `users` virtual model for listing team members
+  - Improved `customFields` description with relation/media/enum/user field guidance
+  - README updated with all 17 tools (was 8)
+
+## 0.2.0
+
+### Minor Changes
+
+- Add `expand` parameter to content entry queries for expanding relation fields.
+  Add `relations` field to entry responses with expanded relation data.
+- Add `relation` field type for linking entries across content models (belongs_to).
+  Add generic `fieldConfig` object to field definitions for type-specific configuration.
+
+## 0.1.0
+
+### Minor Changes
+
+- Expand Content MCP with 9 new tools and multi-language support
+
+  **New Tools (9):**
+  - `createContentModel` - Create content models with field definitions
+  - `updateContentModel` - Update model metadata
+  - `deleteContentModel` - Delete model and all related data (destructive)
+  - `addField` - Add custom field to a model
+  - `updateField` - Update field properties
+  - `removeField` - Remove field and all values (destructive)
+  - `reorderFields` - Reorder fields within a model
+  - `bulkPublishEntries` - Publish multiple entries at once
+  - `duplicateContentEntry` - Deep-copy entry with all translations
+
+  **Updated Tools (3):**
+  - `createContentEntry` - Added `translations` param for multi-language creation in single request
+  - `updateContentEntry` - Added `translations` param + made `languageCode` optional for multi-language updates
+  - `listContentEntries` - Added `missingLanguage` filter
+
+  **Removed:**
+  - `generateFieldContent` - AI generates content natively, no dedicated tool needed
+
+  Total tools: 8 → 17
+
+## 0.0.4
+
+### Patch Changes
+
+- Initial publish of MCP Content server for headless CMS content management
+
+## 0.0.3
+
+### Patch Changes
+
+- Initial publish of MCP Content server for headless CMS content management
+
+## 0.0.2
+
+### Patch Changes
+
+- Fix npx executable resolution by removing duplicate HTTP bin entry. Having multiple bin entries caused `npx @better-i18n/mcp` to fail with "could not determine executable to run" on npm v10+. HTTP transport is still available via `node dist/http.js`.

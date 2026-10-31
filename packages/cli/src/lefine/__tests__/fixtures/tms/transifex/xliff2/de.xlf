@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+  <file id="f1">
+    <unit id="greeting">
+      <notes><note category="developer">Shown on the login screen</note></notes>
+      <segment>
+        <source>Confirm your email address</source>
+        <target>Bestätige deine E-Mail-Adresse</target>
+      </segment>
+    </unit>
+    <unit id="farewell">
+      <segment>
+        <source>See you soon &amp; take care</source>
+        <target>Bis bald &amp; pass auf dich auf</target>
+      </segment>
+    </unit>
+  </file>
+</xliff>

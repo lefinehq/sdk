@@ -1,0 +1,86 @@
+/**
+ * proposeLanguages MCP Tool
+ *
+ * Add one or more target languages to the project.
+ * Already-existing languages are silently skipped (not an error).
+ */
+
+import { z } from "zod";
+import {
+  executeTool,
+  projectInputProperty,
+  projectSchema,
+  success,
+} from "../base-tool.js";
+import type { Tool } from "../types/index.js";
+
+const inputSchema = projectSchema.extend({
+  languages: z
+    .array(
+      z.object({
+        languageCode: z.string().min(2).max(10),
+        status: z.enum(["active", "draft"]).default("active").optional(),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
+export const proposeLanguages: Tool = {
+  definition: {
+    name: "proposeLanguages",
+    description:
+      "Add one or more target languages to the project. Use ISO 639-1 codes (e.g. 'fr', 'ja', 'de') or BCP 47 locale codes (e.g. 'zh-Hans', 'pt-BR'). Already-existing languages are silently skipped.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...projectInputProperty,
+        languages: {
+          type: "array",
+          description:
+            "Languages to add. Each item: { languageCode: string, status?: 'active' | 'draft' }. Default status is 'active'.",
+          items: {
+            type: "object",
+            properties: {
+              languageCode: { type: "string", description: "ISO 639-1 code (e.g. 'fr', 'de', 'ja') or BCP 47 locale (e.g. 'zh-Hans', 'pt-BR')" },
+              status: {
+                type: "string",
+                enum: ["active", "draft"],
+                description: "Language status. 'active' = published to CDN (default), 'draft' = visible but not deployed",
+              },
+            },
+            required: ["languageCode"],
+          },
+        },
+      },
+      required: ["project", "languages"],
+    },
+  },
+
+  execute: (client, args) =>
+    executeTool(args, inputSchema, async (input, { workspaceId, projectSlug }) => {
+      // Normalize language codes to lowercase
+      const languages = input.languages.map(lang => ({
+        ...lang,
+        languageCode: lang.languageCode.toLowerCase(),
+      }));
+
+      const result = await client.mcp.addLanguages.mutate({
+        orgSlug: workspaceId,
+        projectSlug,
+        languages,
+      });
+
+      return success({
+        success: result.success,
+        added: result.added,
+        skipped: result.skipped,
+        results: result.results,
+        project: input.project,
+        ...(result.pendingPublish ? { pendingPublish: result.pendingPublish } : {}),
+        ...(result.added === 0 && result.skipped > 0
+          ? { hint: `All ${result.skipped} submitted language(s) already exist — nothing was added. To change their status, use proposeLanguageEdits.` }
+          : {}),
+      });
+    }),
+};

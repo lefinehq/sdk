@@ -1,0 +1,233 @@
+# @better-i18n/mcp-content
+
+MCP (Model Context Protocol) server for [Better i18n](https://better-i18n.com) content management. Enables AI assistants like Claude and Cursor to create, edit, and publish CMS content directly from your IDE.
+
+## Features
+
+- 📝 **Create Content** — Draft blog posts, changelogs, and pages from your IDE
+- 🌍 **Multilingual** — Write and translate content in any project language
+- ✏️ **Markdown Native** — Write in Markdown, auto-converted to HTML and editor format
+- 🏗️ **Model-Aware** — Respects your content model definitions and custom fields
+- 🚀 **Publish Workflow** — Draft, review, and publish from AI chat
+- 🗑️ **Full CRUD** — Create, read, update, and delete content entries
+
+## Installation
+
+```bash
+# With npx (no install needed)
+npx -y @better-i18n/mcp-content@latest
+
+# Or install globally
+npm install -g @better-i18n/mcp-content
+```
+
+## Setup
+
+### 1. Get Your API Key
+
+1. Go to [dash.better-i18n.com](https://dash.better-i18n.com)
+2. Navigate to Settings → API Keys
+3. Select **Content** type, create and copy your API key
+
+### 2. Configure Cursor
+
+Add to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "better-i18n-content": {
+      "command": "npx",
+      "args": ["-y", "@better-i18n/mcp-content@latest"],
+      "env": {
+        "BETTER_I18N_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+### 3. Configure Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "better-i18n-content": {
+      "command": "npx",
+      "args": ["-y", "@better-i18n/mcp-content@latest"],
+      "env": {
+        "BETTER_I18N_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+### 4. Configure Claude Code
+
+```bash
+claude mcp add better-i18n-content \
+  -s user \
+  -e BETTER_I18N_API_KEY=your-api-key-here \
+  -- npx -y @better-i18n/mcp-content@latest
+```
+
+## Available Tools (18)
+
+All tools require a `project` parameter (format: `"org-slug/project-slug"`) to identify the project.
+
+### Schema Management
+
+| Tool | Description |
+| --- | --- |
+| `createContentModel` | Create a content model with field definitions. Set `includeBody: false` for structured data models (no rich-text body) |
+| `updateContentModel` | Update a content model's display name, description, or settings. Use `includeBody` to add/remove the body field |
+| `deleteContentModel` | Permanently delete a content model and all its entries |
+| `getContentModel` | Get a model's details including all custom field definitions |
+| `listContentModels` | List all content models with entry counts and field definitions |
+| `addField` | Add a custom field to a model (with enum options, relation config) |
+| `updateField` | Update a custom field's properties |
+| `removeField` | Remove a custom field from a content model |
+| `reorderFields` | Reorder custom fields within a content model |
+
+### Entry CRUD
+
+| Tool | Description |
+| --- | --- |
+| `createContentEntry` | Create entry with title, body (Markdown), tags, and custom fields |
+| `updateContentEntry` | Update translations, metadata, or custom fields (3 modes: single-language, multi-language, metadata-only) |
+| `deleteContentEntry` | Permanently delete a content entry |
+| `getContentEntry` | Full entry with all translations, versions, and custom fields |
+| `listContentEntries` | Paginated listing with search, status, and language filters. Use `modelSlug: "users"` to list team members |
+| `duplicateContentEntry` | Duplicate an existing content entry |
+
+### Bulk Operations
+
+| Tool | Description |
+| --- | --- |
+| `bulkCreateEntries` | Create up to 20 entries at once with optional translations. Partial success supported |
+| `bulkPublishEntries` | Publish multiple entries at once |
+
+### Publishing
+
+| Tool | Description |
+| --- | --- |
+| `publishContentEntry` | Set entry status to published and approve translations |
+| `scheduleContentEntry` | Publish an entry at a future time (`publishAt`, ISO 8601 with offset), optionally for some languages only |
+| `unscheduleContentEntry` | Cancel a pending scheduled publish |
+
+## Field Types & Options
+
+When creating content models or adding fields, the following types are available:
+
+| Type | Description | Options |
+| --- | --- | --- |
+| `text` | Single-line text | — |
+| `textarea` | Multi-line text | — |
+| `richtext` | Rich text (Markdown) | — |
+| `number` | Numeric value | — |
+| `boolean` | True/false toggle | — |
+| `date` | Date picker | — |
+| `datetime` | Date and time picker | — |
+| `enum` | Dropdown select | `options.enumValues: [{ label, value }]` |
+| `media` | Image/file upload | `options.unsplash`, `options.aiGeneration` |
+| `relation` | Link to another model | `fieldConfig.targetModel` |
+
+### Enum Fields
+
+Enum fields support a list of allowed values with display labels:
+
+```json
+{
+  "name": "status",
+  "displayName": "Status",
+  "type": "enum",
+  "options": {
+    "enumValues": [
+      { "label": "Draft", "value": "draft" },
+      { "label": "Published", "value": "published" },
+      { "label": "Archived", "value": "archived" }
+    ]
+  }
+}
+```
+
+When setting custom field values on entries, pass the enum `value` (not label):
+
+```json
+{ "customFields": { "status": "published" } }
+```
+
+### Body-less Models (Structured Data)
+
+Set `includeBody: false` when creating models that only use custom fields (e.g., team members, settings, FAQs):
+
+```json
+{
+  "slug": "team-members",
+  "displayName": "Team Members",
+  "includeBody": false,
+  "fields": [
+    { "name": "role", "displayName": "Role", "type": "text", "required": true },
+    { "name": "bio", "displayName": "Bio", "type": "textarea" }
+  ]
+}
+```
+
+Use `updateContentModel` with `includeBody: true` to add the body field back later.
+
+### Bulk Entry Creation
+
+Create multiple entries in a single call (max 20):
+
+```json
+{
+  "modelSlug": "blog-posts",
+  "entries": [
+    { "title": "First Post", "slug": "first-post", "status": "draft" },
+    { "title": "Second Post", "slug": "second-post", "customFields": { "category": "tech" } }
+  ]
+}
+```
+
+The response reports successes and failures separately, so partial creation is safe.
+
+## Example Prompts
+
+Ask your AI assistant:
+
+> "List all content models in my project"
+
+> "Create a new blog post about our v2.0 release"
+
+> "Show me all draft blog posts"
+
+> "Update the excerpt and tags for the 'hello-world' post"
+
+> "Translate the blog post 'hello-world' to German"
+
+> "Publish all draft changelog entries"
+
+> "Add an enum field called 'priority' with options Low, Medium, High to the tasks model"
+
+## Environment Variables
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `BETTER_I18N_API_KEY` | Yes | Your API key |
+| `BETTER_I18N_API_URL` | No | API URL (default: dash.better-i18n.com) |
+| `BETTER_I18N_DEBUG` | No | Enable verbose logging |
+
+## How It Works
+
+1. AI reads `orgSlug` and `projectSlug` from your project config
+2. AI uses content tools to query and manage entries
+3. Content is stored in Better i18n's headless CMS
+4. Markdown is auto-converted to HTML and editor format
+5. Published content is available via the SDK or REST API
+
+## License
+
+MIT © [Better i18n](https://better-i18n.com)

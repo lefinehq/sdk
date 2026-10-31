@@ -1,0 +1,366 @@
+---
+title: Shopify Hydrogen
+description: Integrate Lefine with Shopify Hydrogen for multilingual storefronts
+---
+
+[Shopify Hydrogen](https://hydrogen.shopify.dev) is a React-based framework for building custom Shopify storefronts. `@better-i18n/remix` provides first-class support for Hydrogen with Storefront API locale bridging.
+
+## How It Works
+
+Lefine handles your **UI translations** (button labels, headings, static text), while Shopify's Storefront API handles **product content** (titles, descriptions, prices). The locale detected from the URL drives both systems:
+
+```
+URL: /tr/products/hat
+  └─> Lefine: loads Turkish UI translations from CDN
+  └─> Storefront API: queries product data in Turkish (language: TR)
+```
+
+## Setup
+
+<Steps>
+
+<Step>
+### Install dependencies
+
+<Tabs items={['npm', 'bun', 'pnpm']}>
+  <Tab value="npm">
+  ```bash
+  npm install @better-i18n/remix i18next react-i18next
+  ```
+  </Tab>
+  <Tab value="bun">
+  ```bash
+  bun add @better-i18n/remix i18next react-i18next
+  ```
+  </Tab>
+  <Tab value="pnpm">
+  ```bash
+  pnpm add @better-i18n/remix i18next react-i18next
+  ```
+  </Tab>
+</Tabs>
+
+<Callout type="info">
+`remix-i18next` is **not compatible** with Hydrogen — it requires React Router v7 middleware, which Hydrogen's CF Worker `fetch()` handler does not support. Use `i18next` + `react-i18next` directly instead.
+</Callout>
+</Step>
+
+<Step>
+### Create the i18n singleton
+
+```ts title="app/i18n.server.ts"
+import { createRemixI18n } from "@better-i18n/remix";
+
+export const i18n = createRemixI18n({
+  projectId: "my-company/hydrogen-store", // [!code highlight]
+  defaultLocale: "en", // [!code highlight]
+});
+```
+</Step>
+
+<Step>
+### Define locale mapping
+
+`getLocaleFromRequest` derives Shopify `LanguageCode` and `CountryCode` enums automatically from the CDN language list — no static map needed:
+
+```ts title="app/lib/i18n.ts"
+import type {
+  LanguageCode,
+  CountryCode,
+} from "@shopify/hydrogen/storefront-api-types";
+import type { LanguageOption } from "@better-i18n/remix";
+
+export interface I18nLocale {
+  language: LanguageCode;
+  country: CountryCode;
+  pathPrefix: string;
+}
+
+/**
+ * Derives Shopify Storefront API locale enums from a Lefine locale code.
+ * Lefine uses lowercase ("en", "tr"), Shopify uses uppercase enums (EN, TR).
+ *
+ * Supports both simple ("tr") and compound ("en-gb") locale formats.
+ * "en" without a region defaults to country "US" (most common Shopify use case).
+ */
+function deriveShopifyLocale(code: string, isDefault: boolean): I18nLocale {
+  const [lang, country] = code.toLowerCase().split("-");
+  return {
+    language: lang.toUpperCase() as LanguageCode,
+    country: (country ?? (lang === "en" ? "us" : lang)).toUpperCase() as CountryCode,
+    pathPrefix: isDefault ? "" : `/${code}`,
+  };
+}
+
+/**
+ * Extract locale from URL path prefix, validated against CDN language list.
+ *
+ * /tr/products/hat → "tr"
+ * /products/hat    → defaultLocale
+ */
+export function getLocaleFromRequest(
+  request: Request,
+  languages: LanguageOption[],
+  defaultLocale = "en",
+): { locale: string; i18n: I18nLocale } {
+  const url = new URL(request.url);
+  const firstSegment = url.pathname.split("/")[1]?.toLowerCase();
+
+  if (firstSegment && firstSegment !== defaultLocale && languages.some((l) => l.code === firstSegment)) {
+    return {
+      locale: firstSegment,
+      i18n: deriveShopifyLocale(firstSegment, false),
+    };
+  }
+
+  return { locale: defaultLocale, i18n: deriveShopifyLocale(defaultLocale, true) };
+}
+```
+
+<Callout type="info">
+Locale derivation rules:
+- `"tr"` → `{ language: "TR", country: "TR" }` — language code doubles as country code
+- `"en"` → `{ language: "EN", country: "US" }` — English defaults to US market
+- `"en-gb"` → `{ language: "EN", country: "GB" }` — compound locales split on `-`
+
+The language list comes from your CDN manifest via `getLanguages()`, so adding a language in the Lefine dashboard is all you need — no code changes required.
+</Callout>
+</Step>
+
+<Step>
+### Configure server.ts
+
+Wire everything together in your Hydrogen server entry:
+
+```ts title="server.ts"
+import { createStorefrontClient } from "@shopify/hydrogen";
+import { createRequestHandler } from "@shopify/remix-oxygen";
+import { getLocaleFromRequest } from "~/lib/i18n";
+import { i18n } from "~/i18n.server";
+
+export default {
+  async fetch(
+    request: Request,
+    env: Env,
+    executionContext: ExecutionContext,
+  ): Promise<Response> {
+    const cache = await caches.open("hydrogen");
+
+    // 1. Fetch CDN language list (TtlCache'd — instant after first request)
+    const languages = await i18n.getLanguages(); // [!code highlight]
+
+    // 2. Detect locale from URL path, validated against CDN language list
+    const { locale, i18n: shopifyI18n } = getLocaleFromRequest(request, languages); // [!code highlight]
+
+    // 3. Load Lefine translations from CDN
+    const messages = await i18n.getMessages(locale); // [!code highlight]
+
+    // 4. Create Shopify Storefront client with locale
+    const { storefront } = createStorefrontClient({
+      cache,
+      waitUntil: (p: Promise<unknown>) => executionContext.waitUntil(p),
+      publicStorefrontToken: env.PUBLIC_STOREFRONT_API_TOKEN,
+      privateStorefrontToken: env.PRIVATE_STOREFRONT_API_TOKEN,
+      storeDomain: env.PUBLIC_STORE_DOMAIN,
+      storefrontApiVersion: env.PUBLIC_STOREFRONT_API_VERSION || "2026-01",
+      i18n: shopifyI18n, // [!code highlight]
+    });
+
+    const handleRequest = createRequestHandler({
+      build: remixBuild,
+      mode: process.env.NODE_ENV,
+      getLoadContext() {
+        return {
+          storefront,
+          env,
+          locale, // [!code highlight]
+          messages, // [!code highlight]
+          languages, // [!code highlight]
+          cart: {} as never,
+        };
+      },
+    });
+
+    return handleRequest(request);
+  },
+};
+```
+</Step>
+
+<Step>
+### Augment AppLoadContext
+
+Add type declarations so `context.locale`, `context.messages`, and `context.languages` are typed in your loaders:
+
+```ts title="env.d.ts"
+import type { Storefront, HydrogenCart } from "@shopify/hydrogen";
+import type { Messages, LanguageOption } from "@better-i18n/remix"; // [!code highlight]
+
+declare module "@shopify/remix-oxygen" {
+  interface AppLoadContext {
+    storefront: Storefront;
+    cart: HydrogenCart;
+    env: Env;
+    locale: string; // [!code highlight]
+    messages: Messages; // [!code highlight]
+    languages: LanguageOption[]; // [!code highlight]
+  }
+}
+```
+</Step>
+
+<Step>
+### Add CSP entry
+
+Hydrogen uses Content Security Policy by default. Add `cdn.better-i18n.com` to `connectSrc`:
+
+```ts title="entry.server.tsx"
+const { nonce, header, NonceProvider } = createContentSecurityPolicy({
+  shop: {
+    checkoutDomain: context.env.PUBLIC_STORE_DOMAIN,
+    storeDomain: context.env.PUBLIC_STORE_DOMAIN,
+  },
+  connectSrc: [
+    "'self'",
+    "cdn.better-i18n.com", // [!code highlight]
+  ],
+});
+```
+</Step>
+
+<Step>
+### Create the i18next client helper
+
+This helper creates a per-request i18next instance from the CDN translations already loaded in the server.
+
+```ts title="app/lib/i18n-client.ts"
+import i18next from "i18next";
+import { initReactI18next } from "react-i18next";
+import type { Messages } from "@better-i18n/remix";
+
+export function createI18nextInstance(locale: string, messages: Messages) {
+  const instance = i18next.createInstance();
+  instance.use(initReactI18next).init({
+    lng: locale,
+    resources: { [locale]: messages }, // [!code highlight]
+    initImmediate: false, // sync init — required for SSR // [!code highlight]
+    lowerCaseLng: true,
+    defaultNS: "common",
+    fallbackNS: "common",
+    interpolation: { escapeValue: false },
+  });
+  return instance;
+}
+```
+
+<Callout type="info">
+`initImmediate: false` enables synchronous initialization. Since all translations are already loaded from the CDN via the loader, no network requests are needed — the instance is ready immediately during SSR render.
+</Callout>
+</Step>
+
+<Step>
+### Wrap your app with I18nextProvider
+
+```tsx title="app/root.tsx"
+import { useMemo } from "react";
+import { I18nextProvider } from "react-i18next";
+import { createI18nextInstance } from "~/lib/i18n-client";
+
+export default function App() {
+  const { locale, messages, languages, githubStars } =
+    useLoaderData<typeof loader>();
+
+  const i18nInstance = useMemo( // [!code highlight]
+    () => createI18nextInstance(locale, messages), // [!code highlight]
+    [locale, messages], // [!code highlight]
+  ); // [!code highlight]
+
+  return (
+    <html lang={locale} dir="ltr">
+      <body>
+        <I18nextProvider i18n={i18nInstance}> {/* [!code highlight] */}
+          <Layout locale={locale} languages={languages}>
+            <Outlet />
+          </Layout>
+        </I18nextProvider> {/* [!code highlight] */}
+      </body>
+    </html>
+  );
+}
+```
+</Step>
+
+</Steps>
+
+## Using Translations in Routes
+
+Use the `useTranslation()` hook from `react-i18next` in any component. Translations are pre-loaded server-side via the loader — no client-side fetching needed.
+
+```tsx title="app/routes/($locale)._index.tsx"
+import { useLoaderData } from "react-router";
+import type { LoaderFunctionArgs } from "@shopify/remix-oxygen";
+import { useTranslation } from "react-i18next";
+
+export async function loader({ context }: LoaderFunctionArgs) {
+  const { storefront, locale, messages } = context;
+  const { products } = await storefront.query(PRODUCTS_QUERY);
+  return { locale, messages, products: products.nodes };
+}
+
+export default function Homepage() {
+  const { locale, products } = useLoaderData<typeof loader>();
+  const { t: tc } = useTranslation("common");
+  const { t: tp } = useTranslation("products");
+
+  return (
+    <div>
+      <h1>{tc("welcome")}</h1>
+
+      {products.map((product) => (
+        <div key={product.id}>
+          {/* Product title comes from Storefront API (already localized) */}
+          <h2>{product.title}</h2>
+
+          {/* UI labels come from Lefine via useTranslation */}
+          <span>{tc("view_details")}</span>
+          <span>{tp("from")}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+<Callout type="warn">
+**`meta()` functions cannot use React hooks.** Use the `msg()` helper from `@better-i18n/remix` for meta tags:
+
+```tsx
+import { msg } from "@better-i18n/remix";
+
+export const meta: MetaFunction<typeof loader> = ({ data }) => {
+  const title = msg(data?.messages?.common, "meta_title", "Fallback Title");
+  return [{ title }];
+};
+```
+
+Loaders should still return `messages` so `meta()` can access them.
+</Callout>
+
+## Storefront API Language Support
+
+When you pass the `i18n` option to `createStorefrontClient`, Shopify automatically adds the `@inContext` directive to GraphQL queries. Product titles, descriptions, and collection names are returned in the requested language — no extra work needed.
+
+```ts
+// The Storefront client handles localization automatically:
+const { products } = await storefront.query(PRODUCTS_QUERY);
+// When locale is "tr", product.title returns Turkish content
+// (if available in Shopify admin)
+```
+
+<Callout type="warn">
+Product content localization depends on translations being configured in your **Shopify admin** (Settings > Languages). Lefine handles your custom UI translations; Shopify handles product data.
+</Callout>
+
+## Full Example
+
+For a complete working implementation, see the [hydrogen-demo](https://github.com/better-i18n/oss/tree/main/apps/hydrogen-demo) in the Lefine repository.

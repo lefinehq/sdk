@@ -1,0 +1,6 @@
+.cache/
+apps/*/node_modules/
+apps/*/.next/
+apps/*/next-env.d.ts
+apps/paraglide/src/paraglide/
+apps/lefine-snapshot/src/lefine-snapshot.json

@@ -1,0 +1,15 @@
+{
+  "welcome": {
+    "key": { "description": "Greeting on the dashboard", "plural": false, "max_characters_allowed": 100, "tags": ["dashboard"], "metadata": {} },
+    "translations": [
+      { "locale": "English (United States)", "locale_code": "en-US", "content": "Welcome, {name}!", "state": "reviewed" },
+      { "locale": "German", "locale_code": "de-DE", "content": "Willkommen, {name}!", "state": "translated" }
+    ]
+  },
+  "cancel": {
+    "key": { "plural": false },
+    "translations": [
+      { "locale": "German", "locale_code": "de-DE", "content": "Abbrechen", "state": "unverified" }
+    ]
+  }
+}

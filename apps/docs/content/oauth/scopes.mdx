@@ -1,0 +1,59 @@
+---
+title: Scopes
+description: What each OAuth scope grants and which endpoints it protects.
+---
+
+## Scope reference
+
+| Scope | Default | What it opens |
+|-------|---------|---------------|
+| `org:read` | On | Organization metadata |
+| `projects:read` | On | List and get projects |
+| `projects:write` | **Off** | Create/modify project settings |
+| `keys:read` | On | List translation keys |
+| `keys:write` | On | Create, update, delete keys |
+| `translations:read` | On | Read translations |
+| `translations:write` | On | Write translations (drafts) |
+| `translations:publish` | **Off** | Publish to the public CDN |
+| `content:read` | On | Read Content CMS entries |
+| `content:write` | On | Write Content CMS entries |
+| `content:publish` | **Off** | Publish content entries |
+| `glossary:read` | On | Read glossary terms |
+| `glossary:write` | **Off** | Modify glossary terms |
+
+## Default vs destructive scopes
+
+**Default-on** scopes are pre-checked on the consent screen. The user can uncheck any of them.
+
+**Default-off** scopes (marked **Off** above) require the user to explicitly opt in. They surface a yellow warning on the consent screen because they can modify production-facing content:
+
+- `translations:publish` — pushes to the public CDN
+- `content:publish` — publishes content entries
+- `projects:write` — changes project structure
+- `glossary:write` — rewrites brand terminology
+
+## Endpoint → scope mapping
+
+| Method | Endpoint | Required scope |
+|--------|----------|---------------|
+| `GET` | `/api/oauth-client/me` | None (identity, access token) |
+| `GET` | `/api/oauth-client/organizations` | `org:read` |
+| `GET` | `/api/oauth-client/organizations/:orgId/projects` | `projects:read` |
+| `GET` | `/api/oauth-client/organizations/:orgSlug/projects/:projectSlug/models` | `content:read` |
+| `POST` | `/api/oauth-client/v1/projects` | `projects:write` |
+| `GET` | `/api/oauth-client/v1/projects/:projectId` | `projects:read` |
+| `POST` | `/api/oauth-client/v1/projects/:projectId/languages` | `projects:write` |
+
+Translation key, translation value, publishing, glossary, and Content CMS write
+operations use the same scopes through the MCP tools while dedicated partner
+REST endpoints roll out.
+
+## Requesting scopes
+
+Pass scopes as a space-separated string in the `scope` query parameter:
+
+```
+scope=org:read+projects:read+keys:read+keys:write+translations:write
+```
+
+Request only what you need. Users are more likely to approve integrations that ask for fewer permissions.

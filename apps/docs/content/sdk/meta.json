@@ -1,0 +1,24 @@
+{
+  "title": "Content SDK",
+  "description": "Content CMS, REST delivery, SDK, and view analytics",
+  "icon": "FileText",
+  "root": true,
+  "pages": [
+    "---Introduction---",
+    "quick-start",
+    "models",
+    "analytics",
+    "typescript",
+    "---Frameworks---",
+    "nextjs",
+    "react",
+    "expo",
+    "svelte",
+    "vue",
+    "vanilla",
+    "---Reference---",
+    "api-reference",
+    "analytics-api",
+    "analytics-data-model"
+  ]
+}

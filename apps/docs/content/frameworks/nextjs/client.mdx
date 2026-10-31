@@ -1,0 +1,236 @@
+---
+title: Client-Side Features
+description: Client-side components and hooks for instant locale switching in Next.js
+---
+
+Client-side features allow instant locale switching without a full page reload or server round-trip. When `BetterI18nProvider` is present in the tree, locale changes trigger a CDN fetch and client re-render — no navigation needed.
+
+## BetterI18nProvider
+
+Wrap your Root Layout with `BetterI18nProvider` to enable instant client-side locale switching via `useSetLocale`.
+
+```tsx title="app/[locale]/layout.tsx"
+import { BetterI18nProvider } from '@better-i18n/next/client';
+import { i18n } from '@/i18n.config';
+
+export default async function LocaleLayout({ children, params }) {
+  const { locale } = await params;
+  const messages = await i18n.getMessages(locale);
+
+  return (
+    <BetterI18nProvider config={i18n.config} locale={locale} messages={messages}>
+      {children}
+    </BetterI18nProvider>
+  );
+}
+```
+
+<Callout type="info">
+  `BetterI18nProvider` enables instant client-side locale switching via `useSetLocale` — no page
+  navigation or router refresh needed.
+</Callout>
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `config` | `I18nConfig` | Required | The i18n config from `createI18n()` |
+| `locale` | `string` | From cookie | Override active locale |
+| `messages` | `Messages` | — | Pre-loaded SSR messages |
+| `timeZone` | `string` | `config.timeZone` | IANA timezone |
+| `now` | `Date` | — | Pin "now" for SSR hydration consistency |
+
+---
+
+## useSetLocale()
+
+Switches the active locale. Behavior depends on whether `BetterI18nProvider` is present in the tree.
+
+### With BetterI18nProvider (instant)
+
+When the provider is in the tree, calling `setLocale` triggers an instant CDN fetch and client
+re-render. No page navigation or `router.refresh()` is needed.
+
+```tsx
+'use client';
+
+import { useSetLocale } from '@better-i18n/next/client';
+
+function LanguageSwitcher() {
+  const setLocale = useSetLocale();
+
+  return (
+    <button onClick={() => setLocale('tr')}>
+      Switch to Turkish
+    </button>
+  );
+}
+```
+
+### Without BetterI18nProvider (soft refresh)
+
+When called outside a provider, `useSetLocale` updates the locale cookie and calls
+`router.refresh()` to trigger a soft server re-render.
+
+```tsx
+'use client';
+
+import { useSetLocale } from '@better-i18n/next/client';
+import { i18n } from '@/i18n.config';
+
+function LanguageSwitcher() {
+  // Pass config explicitly when no provider is in the tree
+  const setLocale = useSetLocale({ config: i18n.config });
+
+  return (
+    <select onChange={(e) => setLocale(e.target.value)}>
+      <option value="en">English</option>
+      <option value="tr">Türkçe</option>
+    </select>
+  );
+}
+```
+
+### Behavior Comparison
+
+| Mode | Trigger | Result |
+|------|---------|--------|
+| With `BetterI18nProvider` | `setLocale('tr')` | Instant CDN fetch + client re-render |
+| Without provider | `setLocale('tr')` | Cookie update + `router.refresh()` |
+| With provider + `localePrefix: "never"` | `setLocale('tr')` | Instant CDN fetch + cookie update (URL unchanged) |
+| Without provider + `localePrefix: "never"` | `setLocale('tr')` | Cookie update + `router.refresh()` (URL unchanged) |
+
+> With `localePrefix: "never"`, the URL never changes during locale switching — only the cookie and rendered content update. This makes it ideal for dashboards and SaaS apps where the URL should remain stable across languages.
+
+---
+
+## useManifestLanguages(config)
+
+Fetches available languages with full metadata on the client. Includes request deduplication.
+
+```tsx
+'use client';
+
+import { useManifestLanguages } from '@better-i18n/next/client';
+import { i18n } from '@/i18n.config';
+
+function LanguageSwitcher() {
+  const { languages, isLoading } = useManifestLanguages(i18n.config);
+  const setLocale = useSetLocale();
+
+  if (isLoading) return <select disabled><option>Loading...</option></select>;
+
+  return (
+    <select onChange={(e) => setLocale(e.target.value)}>
+      {languages.map((lang) => (
+        <option key={lang.code} value={lang.code}>
+          {lang.nativeName || lang.name || lang.code}
+        </option>
+      ))}
+    </select>
+  );
+}
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `languages` | `LanguageOption[]` | Available languages from manifest |
+| `isLoading` | `boolean` | `true` while fetching |
+| `error` | `Error \| null` | Error if fetch failed |
+
+---
+
+## LocaleDropdown
+
+A fully-featured, accessible locale switcher dropdown for Next.js. Import from `@better-i18n/next/client` — the RSC-safe client entrypoint.
+
+```tsx
+'use client';
+
+import { LocaleDropdown } from '@better-i18n/next/client';
+import { useLocale } from 'next-intl';
+import { i18n } from '@/i18n.config';
+
+function Header() {
+  const locale = useLocale();
+
+  return (
+    <header>
+      <LocaleDropdown config={i18n.config} locale={locale} />
+    </header>
+  );
+}
+```
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `config` | `I18nConfig` | Required | Config from `createI18n()` |
+| `locale` | `string` | Required | Current locale from `useLocale()` |
+| `languages` | `LanguageOption[]` | — | Pre-fetched languages (skips client CDN fetch) |
+| `variant` | `"styled" \| "unstyled"` | `"styled"` | Styled or unstyled mode |
+| `showFlag` | `boolean` | `true` | Show flag emoji/image |
+| `showNativeName` | `boolean` | `true` | Show native language name |
+| `showLocaleCode` | `boolean` | `true` | Show locale code |
+| `renderTrigger` | `(ctx) => ReactNode` | — | Custom trigger renderer |
+| `renderItem` | `(ctx) => ReactNode` | — | Custom item renderer |
+
+### Locale Switching Behavior
+
+| Context | Behavior |
+|---------|----------|
+| Inside `BetterI18nProvider` | Instant CDN fetch + client re-render — no navigation |
+| Without provider | Cookie update + `router.refresh()` — soft server re-render |
+
+### SSR-Optimized Example
+
+Pass `languages` from the server to skip the client-side CDN fetch:
+
+```tsx title="app/[locale]/layout.tsx"
+import { BetterI18nProvider } from '@better-i18n/next/client';
+import { i18n } from '@/i18n.config';
+
+export default async function LocaleLayout({ children, params }) {
+  const { locale } = await params;
+  const [messages, languages] = await Promise.all([
+    i18n.getMessages(locale),
+    i18n.getLanguages(),
+  ]);
+
+  return (
+    <BetterI18nProvider
+      config={i18n.config}
+      locale={locale}
+      messages={messages}
+    >
+      <Header locale={locale} languages={languages} />
+      {children}
+    </BetterI18nProvider>
+  );
+}
+```
+
+```tsx title="components/header.tsx"
+'use client';
+
+import { LocaleDropdown } from '@better-i18n/next/client';
+import { i18n } from '@/i18n.config';
+import type { LanguageOption } from '@better-i18n/core';
+
+function Header({ locale, languages }: { locale: string; languages: LanguageOption[] }) {
+  return (
+    <header>
+      <LocaleDropdown config={i18n.config} locale={locale} languages={languages} />
+    </header>
+  );
+}
+```
+
+<Callout type="tip">
+  No `transpilePackages` configuration needed — `@better-i18n/next` ships pre-compiled in `dist/`.
+</Callout>
+
+For full props reference, variants, CSS custom properties, and custom rendering — see [LocaleDropdown](/frameworks/locale#localedropdown).

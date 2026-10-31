@@ -1,0 +1,103 @@
+---
+title: Admin SDK API Reference
+description: Complete method reference for all Admin SDK namespaces
+icon: Code
+---
+
+## createAdminClient(config)
+
+```ts
+import { createAdminClient } from '@better-i18n/admin'
+
+const admin = createAdminClient({
+  apiKey: string,        // Required — server-side API key (bi- prefix)
+  projectId: string,     // Required — "org/project" slug, or the project UUID
+  apiUrl?: string,       // Optional — default: "https://api.better-i18n.com"
+  debug?: boolean,       // Optional — enable request logging
+  fetch?: typeof fetch,  // Optional — custom fetch implementation
+})
+```
+
+<Callout type="warn">
+Read endpoints answer in a compact shape: `keys.list()` returns `k`, not
+`keys`, and namespaces are an index into a `nss` lookup table. Every field is
+listed in [Response Shapes](/admin/responses).
+</Callout>
+
+## admin.projects
+
+| Method | Returns |
+|--------|---------|
+| `list()` | All projects in org |
+| `get()` | Current project details |
+
+## admin.keys
+
+| Method | Input | Returns |
+|--------|-------|---------|
+| `list(opts?)` | `{ search?, namespaces?, missingLanguage?, fields?, page?, limit? }` | `{ tot, ret, pg, lim, has_more, nss, k }` |
+| `create(input)` | `{ k: [{ n, ns?, v?, t?, nc? }], force? }` | `{ ok, cnt, new, ren, dup, k, warn? }` |
+| `update(input)` | `{ t: [{ id, l, t, s?, st? }] }` | `{ ok, cnt, upd, errors? }` |
+| `delete(input)` | `{ keyIds: string[] }` | `{ ok, cnt, mk, skip? }` |
+
+## admin.translations
+
+| Method | Input | Returns |
+|--------|-------|---------|
+| `get(opts?)` | `{ namespaces?, keys?, search?, languages?, status?, limit?, compact? }` | `{ prj, sl, ret, tot, has_more, keys }` |
+| `set(input)` | `{ t: [{ id, t: { lang: text } }] }` | `{ ok, cnt, wrote, upd, errors? }` |
+| `publish(opts?)` | `{ translations? }` | Publish result (full field names) |
+| `context(opts?)` | `{ keys?, languages?, kPerKey? }` | `{ prj, src, tgt, inst, ctx, gl, glt }` |
+| `pendingChanges()` | — | `{ prj, has_chg, sum, by_lng, del_k, pub_dst }` |
+
+## admin.content.models
+
+| Method | Input | Returns |
+|--------|-------|---------|
+| `list(opts?)` | — | Model list |
+| `get(input)` | `{ modelSlug }` | Model detail |
+| `create(input)` | `{ slug, displayName, kind }` | Created model |
+| `update(input)` | `{ modelSlug, ... }` | Updated model |
+| `delete(input)` | `{ modelSlug }` | Deletion result |
+
+## admin.content.entries
+
+| Method | Input |
+|--------|-------|
+| `list(opts?)` | `{ models?, language?, search? }` |
+| `get(input)` | `{ entryId }` |
+| `create(input)` | `{ modelSlug, slug, title, bodyMarkdown?, sourceLanguageCode?, status?, customFields?, translations? }` |
+| `update(input)` | `{ entryId, ... }` |
+| `publish(input)` | `{ entryId }` |
+| `delete(input)` | `{ entryId }` |
+| `duplicate(input)` | `{ entryId, newSlug? }` |
+| `bulkCreate(input)` | `{ modelSlug, entries: [...] }` |
+| `bulkUpdate(input)` | `{ entries: [...] }` |
+| `bulkPublish(input)` | `{ entryIds: [...] }` |
+
+## admin.analytics
+
+| Method | Input | Returns |
+|--------|-------|---------|
+| `views(model, entry?, opts?)` | `model: string`, `opts: { period? }` | `{ views, period, cachedAt }` |
+| `stats(model, opts?)` | `opts: { period?, entrySlug? }` | `{ overview, viewsByEntry, viewsByLanguage, viewsByCountry, viewsOverTime }` |
+
+## admin.sync
+
+Full guide: [Sync](/admin/sync).
+
+| Method | Input |
+|--------|-------|
+| `list(opts?)` | `{ limit?, status?, type? }` |
+| `get(input)` | `{ syncId, waitMs? }` |
+| `cancel(input)` | `{ syncId }` |
+
+## admin.languages
+
+Full guide: [Languages](/admin/languages).
+
+| Method | Input |
+|--------|-------|
+| `add(input)` | `{ languages: [{ languageCode, status? }] }` |
+| `update(input)` | `{ updates: [{ languageCode, status }] }` |
+| `delete(input)` | `{ languageCodes: [...] }` |

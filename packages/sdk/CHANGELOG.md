@@ -1,0 +1,298 @@
+# @better-i18n/sdk
+
+## 3.5.0
+
+### Minor Changes
+
+- Add `.bodyFormat()` to the query builder.
+
+  The delivery API can return an entry body in three representations. Markdown
+  (the default) and HTML are projections of the stored document, and blocks that
+  plain Markdown has no syntax for — callouts, toggles, columns, equations,
+  media — are written as tags or flattened. `bodyFormat("plate")` returns the
+  stored document itself, which is lossless, for clients that render rich content
+  with their own components.
+
+  `ContentEntry` gained a second type parameter for the body type, defaulting to
+  `string`, so existing code is unaffected. Pass `ContentBodyNode[]` when querying
+  with `plate`:
+
+  ```ts
+  const { data } = await client
+    .from("blog-posts")
+    .bodyFormat("plate")
+    .single<Record<string, string | null>, ContentBodyNode[]>("hello-world");
+  ```
+
+## 3.4.0
+
+### Minor Changes
+
+- Accept `projectId` as the canonical field name in `createClient`, with `project` retained as a legacy alias for backward compatibility.
+
+  **Why:** The Analytics SDK (`@better-i18n/content`) uses `projectId` and the dashboard / Settings panel call it "Project ID". Naming the field `project` in the Content SDK while the same concept is `projectId` everywhere else caused integrator confusion. Aligning on `projectId` also signals that the value is a stable identifier — renaming the project's display name in the dashboard does not change the slug.
+
+  **Migration (optional, no urgency):**
+
+  ```ts
+  // Before
+  createClient({ project: "acme/web-app", apiKey: "bi18n_..." });
+
+  // After (recommended)
+  createClient({ projectId: "acme/web-app", apiKey: "bi18n_..." });
+  ```
+
+  The legacy `project` field continues to work indefinitely. Existing integrations need no changes.
+
+## 3.3.0
+
+### Minor Changes
+
+- Add `extractLanguageCodes()` and `hasLanguage()` utilities for normalizing the `availableLanguages` field returned by the Content API.
+
+  The Content API returns `availableLanguages` as `ContentEntryLanguage[]` objects (`{ code, name, countryCode }`), but the SDK type historically allowed only `string[]`. Consumers that used `typeof v === "string"` to filter the array always got an empty result — breaking hreflang SEO links and locale-filtered article listings.
+
+  **New exports:**
+  - `extractLanguageCodes(langs)` — normalizes both `string[]` and `ContentEntryLanguage[]` shapes into a plain `string[]` of language codes.
+  - `hasLanguage(item, locale)` — checks whether a raw content entry has a translation for the given locale, handling both array shapes. Returns `true` when `availableLanguages` is absent (treats entries without the field as universally available).
+
+  **Type fix:** `ContentEntry.availableLanguages` and `ContentEntryListItem.availableLanguages` are now typed as `(string | ContentEntryLanguage)[]` instead of `string[]` to accurately reflect what the API returns.
+
+## 3.2.1
+
+### Patch Changes
+
+- Remove "bun" export conditions that referenced unpublished src/ files
+
+  All packages had `"bun": "./src/*.ts"` conditions in their exports map, but `src/` is not included in the npm package (`files: ["dist"]`). Bun runtime resolves the "bun" condition before "default", causing module resolution failures for customers using Bun to build their apps.
+
+## 3.2.0
+
+### Minor Changes
+
+- Add new ContentEntry response fields: translationStatus, bodyHtml, bodyMarkdown, availableLanguageDetails, sourceLanguage. Add fieldConfig.targetModel to ContentModelField.
+
+## 3.1.0
+
+### Minor Changes
+
+- feat(sdk): add fields array and includeBody to ContentModel type
+
+  ContentModel now exposes field definitions (name, type, required, localized, enumValues) and the includeBody flag, enabling frontends to render model structure and form fields dynamically.
+
+## 3.0.0
+
+### Major Changes
+
+- feat!: Supabase-style chainable query builder + flat custom field access
+
+  ### New API — chainable `from()` builder
+
+  ```typescript
+  // List entries
+  const { data, error, total, hasMore } = await client
+    .from("blog-posts")
+    .eq("status", "published")
+    .order("publishedAt", { ascending: false })
+    .limit(10)
+    .language("en");
+
+  // Single entry
+  const { data: post, error } = await client
+    .from("blog-posts")
+    .expand("author", "category")
+    .language("fr")
+    .single("hello-world");
+  ```
+
+  - `ContentQueryBuilder` — immutable chainable builder with `.select()`, `.eq()`, `.filter()`, `.search()`, `.language()`, `.order()`, `.limit()`, `.page()`, `.expand()`, `.single()`
+  - `SingleQueryBuilder` — thenable builder for single-entry fetches
+  - All results use a `{ data, error }` pattern (never throws) — `QueryResult<T>` / `SingleQueryResult<T>`
+  - Internal HTTP layer extracted to `http.ts`; `createHttpClient` exported
+
+  ### Breaking: flat custom field access
+
+  Custom fields are now spread directly on entry and relation objects instead of nested under `customFields`:
+
+  ```typescript
+  // Before (v2)
+  entry.customFields.readTime;
+  relation.customFields?.avatar;
+
+  // After (v3)
+  entry.readTime;
+  relation.avatar;
+  ```
+
+  - `ContentEntry<CF>` changed to intersection type `& CF` — `customFields` property removed
+  - `ContentEntryListItem<CF>` changed to intersection type `& CF` — `customFields` property removed
+  - `RelationValue` changed to `& Record<string, string | null>` — `customFields` property removed
+  - `RelationValue.customFields` removed; relation custom fields are now top-level properties
+
+  ### Deprecations
+  - `client.getEntries()` — use `client.from(model)` instead
+  - `client.getEntry()` — use `client.from(model).single(slug)` instead
+  - `createContentAPIClient` — use `createHttpClient` from `./http.js` instead
+
+## 2.0.1
+
+### Patch Changes
+
+- fix: extend SDK types for fields param and optional list item fields
+  - Add `fields?: string[]` to `ListEntriesOptions` to allow requesting specific fields in entry list responses
+  - Add optional `body?` and `customFields?` fields to `ContentEntryListItem` (present only when explicitly requested via `fields`)
+  - Fix `ClientConfig` JSDoc URL (`dash.better-i18n.com` → `content.better-i18n.com`)
+  - Update README with fields param usage example
+
+## 2.0.0
+
+### Major Changes
+
+- **Breaking:** Simplified `ContentEntry` type and unified body field.
+
+  ### Breaking Changes
+
+  **`ContentEntry`**
+  - `body` is now `string | null` (Markdown string) — was `Record<string, any> | null` (Plate JSON)
+  - Removed: `bodyHtml`, `bodyMarkdown` — use `body` instead
+  - Removed: `featuredImage`, `tags`, `author`, `excerpt`, `metaTitle`, `metaDescription` — these fields do not exist in the database and were never populated
+
+  **`ContentEntryListItem`**
+  - Removed: `excerpt`, `featuredImage`, `tags`, `author` — same reason as above
+  - Added: `body?: string | null` — Markdown body, only present when requested via `fields`
+  - Added: `customFields?: Record<string, string | null>` — custom field values, only present when requested
+
+  ### New Features
+
+  **Field selection** — `fields` option on both `getEntries` and `getEntry`:
+
+  ```typescript
+  // Only fetch what you need
+  const { items } = await client.getEntries("blog-posts", {
+    fields: ["title", "body", "category"],
+  });
+
+  const post = await client.getEntry("blog-posts", "hello-world", {
+    fields: ["title", "body"],
+  });
+  ```
+
+  When `fields` is omitted, all fields are returned (no breaking change for read-all usage).
+  Base fields (`id`, `slug`, `status`, `publishedAt`, `sourceLanguage`, `availableLanguages`) are always included.
+
+  ### Migration
+
+  ```typescript
+  // Before
+  post.bodyMarkdown; // string | null
+  post.bodyHtml; // string | null
+  post.body; // Record<string, any> | null  ← Plate JSON
+
+  // After
+  post.body; // string | null  ← Markdown string
+  ```
+
+## 1.1.0
+
+### Minor Changes
+
+- Add `expand` parameter to content entry queries for expanding relation fields.
+  Add `relations` field to entry responses with expanded relation data.
+
+## 1.0.1
+
+### Patch Changes
+
+- Ship compiled JavaScript instead of raw TypeScript source files. Packages now export pre-built `dist/` files with proper `.js`, `.d.ts`, and source maps — eliminating the need for `transpilePackages` workarounds in consumer projects.
+
+## 1.0.0
+
+### Major Changes
+
+- **BREAKING CHANGE: Migrate to dedicated Content API**
+
+  The SDK now uses the new dedicated Content API at `content.better-i18n.com` instead of `dash.better-i18n.com/api/v1/content`.
+
+  ### What Changed
+  - **Default API Base**: `https://content.better-i18n.com` (was `https://dash.better-i18n.com`)
+  - **URL Path**: `/v1/content` (was `/api/v1/content`)
+  - **CORS Support**: Wildcard origin enabled for public access
+  - **Performance**: CDN caching with 60s cache + 1h stale-while-revalidate
+
+  ### Migration Guide
+
+  **For users without custom `apiBase`:**
+  No action required. SDK will automatically use the new endpoint.
+
+  **For users with custom `apiBase`:**
+
+  ```typescript
+  // Before
+  const client = createClient({
+    project: "acme/web-app",
+    apiKey: "bi18n_...",
+    apiBase: "https://dash.better-i18n.com", // Old endpoint
+  });
+
+  // After
+  const client = createClient({
+    project: "acme/web-app",
+    apiKey: "bi18n_...",
+    apiBase: "https://content.better-i18n.com", // New endpoint
+  });
+  ```
+
+  ### Benefits
+  - ✅ **Proper CORS** - No more CORS errors in browser
+  - ✅ **Better Performance** - CDN caching for faster responses
+  - ✅ **Clean URLs** - Professional API endpoint
+  - ✅ **Independent Scaling** - Dedicated infrastructure
+
+  ### Backward Compatibility
+
+  The old endpoint at `dash.better-i18n.com/api/v1/content` will remain operational during a transition period. However, we recommend migrating to the new endpoint as soon as possible.
+
+  To temporarily use the old endpoint:
+
+  ```typescript
+  const client = createClient({
+    project: "acme/web-app",
+    apiKey: "bi18n_...",
+    apiBase: "https://dash.better-i18n.com",
+  });
+  ```
+
+## 0.4.0
+
+### Minor Changes
+
+- Simplify client config to single `project` identifier
+  - **Single project param**: Replace separate `org` + `project` with single `project: "org/project"` format, matching the dashboard URL path
+  - **Debug mode**: Add `debug` option to log all request URLs, status codes, and response bodies
+  - **Fix API base URL**: Default to `https://dash.better-i18n.com` instead of non-existent `api.better-i18n.com`
+  - **Body type fix**: Change `body` type from `unknown` to `Record<string, any> | null` for TanStack Start serialization compatibility
+
+## 0.3.0
+
+### Minor Changes
+
+- Add generic custom fields, status filter, sort/order, and pagination metadata to Content SDK
+  - `ContentEntry<CF>` generic type parameter for typed custom fields
+  - `status` filter option (`draft`, `published`, `archived`)
+  - `sort` and `order` options for listing entries
+  - `PaginatedResponse<T>` wrapper with `items`, `total`, `hasMore`
+  - New exported types: `ContentEntryStatus`, `ContentEntrySortField`, `PaginatedResponse`
+
+## 0.2.0
+
+### Minor Changes
+
+- Remove translations/CDN client from SDK - SDK is now content-only
+
+  Breaking: Removed `./content` and `./translations` export paths, removed `TranslationsClient`, `TranslationManifest`, `BetterI18nClient` types, removed `cdnBase` from config. `createClient()` now returns `ContentClient` directly with flat API (`client.getModels()` instead of `client.content.getModels()`).
+
+## 0.1.1
+
+### Patch Changes
+
+- Initial release of `@better-i18n/sdk` — TypeScript SDK for fetching translations and content from Better i18n. Supports CDN mode (no API key, published content only) and API mode (full access with API key).

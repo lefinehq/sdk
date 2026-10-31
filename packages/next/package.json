@@ -1,0 +1,83 @@
+{
+  "name": "@better-i18n/next",
+  "version": "0.10.0",
+  "description": "Better-i18n Next.js integration",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lefinehq/sdk.git",
+    "directory": "packages/next"
+  },
+  "bugs": {
+    "url": "https://github.com/better-i18n/better-i18n/issues"
+  },
+  "homepage": "https://github.com/better-i18n/better-i18n/tree/main/packages/next",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    },
+    "./middleware": {
+      "types": "./dist/middleware.d.ts",
+      "default": "./dist/middleware.js"
+    },
+    "./proxy": {
+      "types": "./dist/proxy.d.ts",
+      "default": "./dist/proxy.js"
+    },
+    "./revalidate": {
+      "types": "./dist/revalidate.d.ts",
+      "default": "./dist/revalidate.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "i18n",
+    "localization",
+    "nextjs",
+    "next-intl",
+    "cdn"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@better-i18n/core": "workspace:*",
+    "@floating-ui/react": "^0.27.20"
+  },
+  "peerDependencies": {
+    "next": ">=15.0.0",
+    "next-intl": ">=4.0.0",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "devDependencies": {
+    "next": "^15.5.25",
+    "next-intl": "^4.14.5",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.3.0",
+    "typescript": "~5.9.2"
+  }
+}

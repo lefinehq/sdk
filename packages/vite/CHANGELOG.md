@@ -1,0 +1,169 @@
+# @better-i18n/vite
+
+## 0.2.14
+
+### Patch Changes
+
+- The dev server checks the manifest before it injects translations (a 304 when nothing was published), so a reload after a publish shows the new text without waiting for the manifest TTL, and it warns once per outage when only the last verified copy is available.
+- Updated dependencies
+  - @better-i18n/core@0.15.0
+
+## 0.2.13
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @better-i18n/core@0.14.0
+
+## 0.2.12
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.13.0
+
+## 0.2.11
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @better-i18n/core@0.12.0
+
+## 0.2.10
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.11.0
+
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.10.0
+
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.9.0
+
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.8.0
+
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.7.0
+
+## 0.2.5
+
+### Patch Changes
+
+- Remove "bun" export conditions that referenced unpublished src/ files
+
+  All packages had `"bun": "./src/*.ts"` conditions in their exports map, but `src/` is not included in the npm package (`files: ["dist"]`). Bun runtime resolves the "bun" condition before "default", causing module resolution failures for customers using Bun to build their apps.
+
+- Updated dependencies
+  - @better-i18n/core@0.6.2
+
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @better-i18n/core@0.6.0
+
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.5.0
+
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @better-i18n/core@0.4.0
+
+## 0.2.1
+
+### Patch Changes
+
+- ### @better-i18n/use-intl
+
+  **Breaking:** `useLocaleRouter` is no longer exported from the main entry point. Import it from the new `/router` sub-path:
+
+  ```ts
+  // Before
+  import { useLocaleRouter } from "@better-i18n/use-intl";
+
+  // After
+  import { useLocaleRouter } from "@better-i18n/use-intl/router";
+  ```
+
+  **New:** `useLocalePath` — a router-agnostic hook for locale path building and navigation. Works with React Router, TanStack Router, or plain Vite apps without any router dependency.
+
+  ```ts
+  import { useLocalePath } from "@better-i18n/use-intl";
+
+  const { localePath, navigate, locale, isReady } = useLocalePath();
+  ```
+
+  **Fixed:**
+  - **SSR locale mismatch (critical):** When using `@better-i18n/vite` plugin with URL-based locale routing (e.g., `/:locale/*`), non-default locale URLs (like `/tr`) would display the default locale's messages instead of fetching the correct translations from CDN. The provider now correctly tracks the SSR data's locale separately from the prop locale.
+  - **`setLocale()` dual-write:** When `onLocaleChange` is provided, the provider no longer calls `window.history.replaceState` internally — the consumer's router handles URL updates exclusively, preventing race conditions.
+  - **`replaceState` locale detection:** The fallback URL updater now validates path segments against `supportedLocales` from SSR data, preventing false positives on 2-letter path segments like `/us/profile`.
+
+  ### @better-i18n/vite
+  - Inject `supportedLocales` and `localeCookie` into SSR data payload
+  - Validate detected locale against CDN manifest before injecting — falls back to default locale if unsupported
+
+## 0.2.0
+
+### Minor Changes
+
+- Add `@better-i18n/vite` plugin for zero-FOUC server-side translation injection.
+
+  **New package: `@better-i18n/vite`**
+  - Vite plugin that fetches translations server-side and injects them as `<script id="__better_i18n__">` into HTML
+  - Locale detection from URL path, cookie, and Accept-Language header
+  - Works in both dev server and production build modes
+  - Single source of truth: configure `project` once in the plugin, provider reads it automatically
+
+  **Updated: `@better-i18n/use-intl`**
+  - Provider reads SSR-injected data synchronously from DOM on first render (zero FOUC)
+  - `project` and `locale` props are now optional when using the Vite plugin
+  - Backwards compatible: explicit props still take precedence over plugin data
+
+  **Usage:**
+
+  ```ts
+  // vite.config.ts
+  import { betterI18n } from "@better-i18n/vite";
+  export default defineConfig({
+    plugins: [betterI18n({ project: "acme/dashboard" }), react()],
+  });
+  ```
+
+  ```tsx
+  // App.tsx — no project/locale/messages props needed
+  <BetterI18nProvider>
+    <LocaleDropdown />
+    <App />
+  </BetterI18nProvider>
+  ```

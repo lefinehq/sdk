@@ -1,0 +1,237 @@
+---
+title: Geo-Based Locale Detection
+description: Automatically detect and serve the right language based on visitor's country using Cloudflare Workers, Vercel, or any edge platform
+icon: MapPin
+---
+
+Geo-based locale detection automatically redirects visitors to their country's language — a Turkish visitor sees `/tr/`, a Japanese visitor sees `/ja/`, without any manual selection.
+
+Unlike `Accept-Language` header detection (which depends on browser settings), geo detection uses the visitor's **IP address location** for more accurate results. Most edge platforms provide this for free.
+
+## How It Works
+
+```
+Visitor from Turkey → Edge detects country: "TR"
+  → buildCountryLocaleMap() maps "TR" → "tr" (from CDN manifest)
+  → detectLocale() returns { locale: "tr", detectedFrom: "geo" }
+  → 301 redirect to /tr/
+  → Page renders in Turkish with ₺ pricing
+```
+
+The mapping is **manifest-driven** — when you add a new language in the Lefine dashboard and assign it a country code, geo detection picks it up automatically. No code changes needed.
+
+## Quick Start
+
+The SDK provides two functions for geo detection:
+
+```ts
+import { buildCountryLocaleMap, detectLocale } from "@better-i18n/core";
+// or from use-intl:
+// import { buildCountryLocaleMap, detectLocale } from "@better-i18n/use-intl/server";
+```
+
+### `buildCountryLocaleMap(languages)`
+
+Builds a country→locale map from your CDN manifest's languages. Each language's `countryCode` field (set in the dashboard) is used as the source of truth.
+
+```ts
+const languages = await i18n.getLanguages();
+const countryMap = buildCountryLocaleMap(languages);
+// { tr: "tr", de: "de", jp: "ja", cn: "zh-hans", at: "de", mx: "es", ... }
+```
+
+Includes multi-country overrides automatically (e.g., Austria→German, Mexico→Spanish, Brazil→Portuguese).
+
+### `detectLocale({ countryCode, countryLocaleMap, ... })`
+
+Pass the country code from your edge platform and the map:
+
+```ts
+const result = detectLocale({
+  projectId: "acme/web",
+  defaultLocale: "en",
+  availableLocales: languages.map(l => l.code),
+  countryCode: "TR",              // from edge platform
+  countryLocaleMap: countryMap,    // from buildCountryLocaleMap
+});
+
+// result.locale = "tr"
+// result.detectedFrom = "geo"
+// result.shouldSetCookie = true
+```
+
+## Detection Priority
+
+The `detectLocale` function checks sources in this order:
+
+| Priority | Source | `detectedFrom` | When it wins |
+|----------|--------|----------------|-------------|
+| 1 | **URL path** (`/tr/pricing`) | `"path"` | User explicitly chose a language |
+| 2 | **Cookie** (`locale=tr`) | `"cookie"` | User previously chose a language |
+| 3 | **Geo/Country** (IP-based) | `"geo"` | First-time visitor, no preference |
+| 4 | **Accept-Language** header | `"header"` | Fallback if geo unavailable |
+| 5 | **Default locale** | `"default"` | Ultimate fallback |
+
+<Callout type="warn">
+**Don't skip URL priority.** If a user manually navigates to `/en/pricing`, they chose English — even if they're in Turkey. Geo detection should only kick in when there's no locale in the URL or cookie.
+</Callout>
+
+## Platform Setup
+
+Each edge platform provides the country code differently. You only need to pass it to `detectLocale`.
+
+<Tabs items={["Cloudflare Workers", "Vercel Edge", "Remix / Node.js"]}>
+<Tab value="Cloudflare Workers">
+
+Cloudflare Workers provide `request.cf.country` on every request — free on all plans.
+
+```ts title="middleware.ts"
+import { buildCountryLocaleMap, detectLocale } from "@better-i18n/core";
+
+// Cache the country map (build once per worker lifecycle)
+let countryMap: Record<string, string> | null = null;
+
+export async function handleRequest(request: Request) {
+  const languages = await i18n.getLanguages();
+  if (!countryMap) countryMap = buildCountryLocaleMap(languages);
+
+  const result = detectLocale({
+    projectId: "acme/web",
+    defaultLocale: "en",
+    availableLocales: languages.map(l => l.code),
+    pathLocale: getLocaleFromPath(new URL(request.url).pathname),
+    cookieLocale: getCookie(request, "locale"),
+    countryCode: (request as any).cf?.country,
+    countryLocaleMap: countryMap,
+    headerLocale: request.headers.get("accept-language"),
+  });
+
+  if (result.detectedFrom !== "path") {
+    // Redirect to detected locale
+    return Response.redirect(`/${result.locale}/`, 301);
+  }
+}
+```
+
+<Callout type="tip">
+`request.cf.country` is available on all Cloudflare Workers plans, including free. It returns an [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code like `"TR"`, `"DE"`, `"JP"`.
+</Callout>
+
+</Tab>
+<Tab value="Vercel Edge">
+
+Vercel provides `request.geo.country` in Edge Middleware.
+
+```ts title="middleware.ts"
+import { NextResponse, type NextRequest } from "next/server";
+import { buildCountryLocaleMap, detectLocale } from "@better-i18n/core";
+
+// Pre-build the map (or fetch at startup)
+const countryMap = buildCountryLocaleMap(yourLanguages);
+
+export function middleware(request: NextRequest) {
+  const result = detectLocale({
+    projectId: "acme/web",
+    defaultLocale: "en",
+    availableLocales: ["en", "tr", "de", "fr", "ja"],
+    pathLocale: getLocaleFromPath(request.nextUrl.pathname),
+    cookieLocale: request.cookies.get("locale")?.value,
+    countryCode: request.geo?.country,
+    countryLocaleMap: countryMap,
+  });
+
+  if (result.detectedFrom !== "path") {
+    const url = request.nextUrl.clone();
+    url.pathname = `/${result.locale}${request.nextUrl.pathname}`;
+    return NextResponse.redirect(url, 301);
+  }
+
+  return NextResponse.next();
+}
+```
+
+</Tab>
+<Tab value="Remix / Node.js">
+
+For Node.js servers, use the `CF-IPCountry` header (if behind Cloudflare) or a geo-IP library:
+
+```ts title="app/entry.server.tsx"
+import { buildCountryLocaleMap, detectLocale } from "@better-i18n/core";
+
+// Behind Cloudflare (free — CF adds this header automatically)
+const countryCode = request.headers.get("CF-IPCountry");
+
+// Or use geoip-lite for standalone Node.js
+// import { lookup } from "geoip-lite";
+// const ip = request.headers.get("x-forwarded-for")?.split(",")[0];
+// const countryCode = ip ? lookup(ip)?.country : null;
+
+const languages = await i18n.getLanguages();
+const countryMap = buildCountryLocaleMap(languages);
+
+const result = detectLocale({
+  projectId: "acme/web",
+  defaultLocale: "en",
+  availableLocales: languages.map(l => l.code),
+  countryCode,
+  countryLocaleMap: countryMap,
+});
+```
+
+</Tab>
+</Tabs>
+
+## Localized Pricing
+
+Geo detection pairs perfectly with localized pricing. When you detect a visitor's country:
+
+1. **Landing page** shows prices in their local currency (e.g., ₺349 for Turkey)
+2. **Stripe Checkout** uses [Manual Currency Prices](https://docs.stripe.com/payments/checkout/localize-prices/manual-currency-prices) to charge in the same currency
+3. **No conversion fee** for the customer (unlike Adaptive Pricing)
+
+Store per-locale prices in the [Content CMS](/sdk) and fetch them based on the detected locale — the same data powers both the pricing page and the checkout flow.
+
+## Testing
+
+### Local Development
+
+Most dev servers don't provide geo data. Test by manually passing a country code:
+
+```ts
+// Override for testing
+const countryCode = process.env.TEST_COUNTRY ?? request.cf?.country;
+```
+
+```bash
+# Test with environment variable
+TEST_COUNTRY=TR bun run dev
+
+# Or with curl (if your middleware reads a header)
+curl -H "X-Country: TR" http://localhost:3000/
+```
+
+### Stripe Checkout
+
+Test localized currency in Stripe Checkout using the location email format:
+
+```
+test+location_TR@example.com  → Shows TRY prices
+test+location_DE@example.com  → Shows EUR prices
+test+location_JP@example.com  → Shows JPY prices
+```
+
+## Country Code Reference
+
+`buildCountryLocaleMap` automatically maps these countries (and more) from your manifest:
+
+| Country | Code | Locale | Source |
+|---------|------|--------|--------|
+| Turkey | TR | `tr` | Manifest |
+| Germany | DE | `de` | Manifest |
+| Japan | JP | `ja` | Manifest |
+| Austria | AT | `de` | Multi-country override |
+| Mexico | MX | `es` | Multi-country override |
+| Brazil | BR | `pt-br` | Multi-country override |
+| UAE | AE | `ar` | Multi-country override |
+
+Add a new language with a country code in the dashboard → `buildCountryLocaleMap` picks it up automatically on the next manifest fetch.

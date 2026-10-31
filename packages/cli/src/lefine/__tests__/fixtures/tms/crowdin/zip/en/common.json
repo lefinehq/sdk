@@ -1,0 +1,6 @@
+{
+  "welcome": "Welcome, {{name}}!",
+  "nav": { "save": "Save", "cancel": "Cancel" },
+  "items_one": "{{count}} item",
+  "items_other": "{{count}} items"
+}

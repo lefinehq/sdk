@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "projectId": "prj_site",
+  "revision": 7,
+  "version": "mh4p9xq1-e5f6a7b8",
+  "publishedAt": "2026-10-24T10:00:00.000Z",
+  "languages": ["de", "en", "pt"],
+  "files": {
+    "en": {
+      "posts": {
+        "version": "mh3k2lc0-a1b2c3d4",
+        "sha256": "dee221439c172e4b4caefdc5c65af3093fbfea8a8bbbb7546e414fa9198f113e",
+        "size": 1350,
+        "entryCount": 2,
+        "publishedAt": "2026-10-24T10:00:00.000Z"
+      }
+    },
+    "de": {
+      "posts": {
+        "version": "mh4p9xq1-e5f6a7b8",
+        "sha256": "da5a0e2ef199f4c08df8e350393ad4973724c9d1ca16261578425b3b84b2fcd9",
+        "size": 1097,
+        "entryCount": 1,
+        "publishedAt": "2026-10-24T10:00:00.000Z"
+      }
+    },
+    "pt": {
+      "posts": {
+        "version": "mh4p9xq1-e5f6a7b8",
+        "sha256": "1a4fcbdfe51326cae1f89145bee1bd132a1b0c0aa147cf5e0912ead3f29316d1",
+        "size": 1070,
+        "entryCount": 1,
+        "publishedAt": "2026-10-24T10:00:00.000Z"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "welcome": {
+    "string": "Willkommen, {name}!",
+    "developer_comment": "Greeting on the dashboard"
+  },
+  "nav": {
+    "save": {
+      "string": "Speichern",
+      "context": "Button",
+      "character_limit": 20
+    },
+    "files": {
+      "string": "{ file_count, plural, one {Du hast {file_count} Datei.} other {Du hast {file_count} Dateien.} }"
+    }
+  }
+}

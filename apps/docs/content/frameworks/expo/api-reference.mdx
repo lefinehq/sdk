@@ -1,0 +1,310 @@
+---
+title: Expo API Reference
+description: Complete API documentation for @better-i18n/expo
+---
+
+Complete API reference for the Expo/React Native SDK.
+
+## initBetterI18n
+
+The primary API. Fetches translations from the better-i18n CDN, initializes i18next with all namespaces pre-loaded, and overrides `changeLanguage()` to pre-load translations before switching.
+
+```ts
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import { initBetterI18n } from '@better-i18n/expo';
+
+i18n.use(initReactI18next);
+
+const { languages, core } = await initBetterI18n({
+  projectId: 'acme/my-app',
+  i18n,
+  defaultLocale: 'en',
+  useDeviceLocale: true,
+  debug: __DEV__,
+});
+```
+
+### What it does
+
+1. Fetches the project manifest and initial translations from CDN in parallel
+2. Auto-discovers all namespaces and picks `"common"` as the default (or first available)
+3. Initializes i18next with translations pre-loaded into the resource store
+4. Overrides `changeLanguage()` to pre-load translations before switching (no English flash)
+5. Registers a `languageChanged` listener as a safety net for lazy loading
+
+### Options
+
+<Accordion>
+<AccordionItem title="InitBetterI18nOptions">
+
+```ts
+interface InitBetterI18nOptions {
+  projectId: string;
+  i18n?: i18n;
+  defaultLocale?: string;
+  storage?: TranslationStorage;
+  staticData?: Record<string, Messages> | (() => Promise<Record<string, Messages>>);
+  fetchTimeout?: number;
+  retryCount?: number;
+  useDeviceLocale?: boolean;
+  debug?: boolean;
+  i18nextOptions?: Partial<InitOptions>;
+}
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `projectId` | `string` | Required | Project ID — `org/project` slug or canonical UUID |
+| `i18n` | `i18n` | Global singleton | i18next instance (call `.use(initReactI18next)` before passing). Defaults to the global `import i18next from 'i18next'` singleton — safe to omit in React Native. |
+| `defaultLocale` | `string` | `"en"` | Fallback locale |
+| `storage` | `TranslationStorage` | In-memory | Persistent storage adapter — use `storageAdapter(mmkv)` or `storageAdapter(AsyncStorage)` |
+| `staticData` | `Record<string, Messages>` | — | Bundled translations for airplane mode first launch |
+| `fetchTimeout` | `number` | `10000` | CDN fetch timeout in milliseconds |
+| `retryCount` | `number` | `1` | Retry attempts on CDN failure |
+| `useDeviceLocale` | `boolean` | `false` | Auto-detect device locale via expo-localization |
+| `debug` | `boolean` | `false` | Enable debug logging to console |
+| `i18nextOptions` | `Partial<InitOptions>` | `{}` | Additional i18next init options (e.g., `defaultNS`, `ns`, `react`). Merged with SDK defaults. |
+
+</AccordionItem>
+</Accordion>
+
+### Return Value
+
+<Accordion>
+<AccordionItem title="BetterI18nResult">
+
+```ts
+interface BetterI18nResult {
+  /** Core instance for accessing manifest, languages, etc. */
+  core: I18nCore;
+  /** Available languages from the CDN manifest */
+  languages: LanguageOption[];
+}
+```
+
+**`core`** — The `@better-i18n/core` instance. Use it to access the raw manifest, fetch messages for specific locales, or interact with the CDN directly.
+
+**`languages`** — Array of available languages from the CDN manifest. Use this to build a dynamic language picker.
+
+</AccordionItem>
+</Accordion>
+
+<Callout type="warning">
+  Do **not** call `i18n.init()` separately — `initBetterI18n` handles initialization internally. Use `i18nextOptions` to pass custom i18next settings.
+</Callout>
+
+---
+
+## Locale Detection
+
+<Accordion>
+<AccordionItem title="getDeviceLocale(options?)">
+
+Returns the device's primary locale using `expo-localization`. Falls back to the provided default if expo-localization is not installed.
+
+```ts
+import { getDeviceLocale } from '@better-i18n/expo';
+
+const locale = getDeviceLocale({ fallback: 'en' });
+// "tr" on a Turkish device, "en" if detection fails
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `fallback` | `string` | `"en"` | Locale to return if detection fails |
+
+**Returns:** `string` — language code (e.g., `"en"`, `"tr"`, `"de"`)
+
+</AccordionItem>
+
+<AccordionItem title="getDeviceLocales()">
+
+Returns all device locales as language codes. Returns an empty array if `expo-localization` is not installed.
+
+```ts
+import { getDeviceLocales } from '@better-i18n/expo';
+
+const locales = getDeviceLocales();
+// ["tr", "en", "de"]
+```
+
+**Returns:** `string[]` — array of language codes
+
+</AccordionItem>
+</Accordion>
+
+---
+
+## Storage
+
+<Accordion>
+<AccordionItem title="storageAdapter(storage, options?)">
+
+Wraps an MMKV or AsyncStorage instance and normalizes it to the `TranslationStorage` interface. When `localeKey` is provided, returns a `LocaleAwareTranslationStorage` that also persists the active locale.
+
+```ts
+storageAdapter(
+  storage: MMKVLike | AsyncStorageLike,
+  options?: StorageAdapterOptions
+): TranslationStorage | LocaleAwareTranslationStorage
+```
+
+<Tabs items={['MMKV', 'AsyncStorage']}>
+  <Tab value="MMKV">
+```ts
+import { MMKV } from 'react-native-mmkv';
+import { storageAdapter } from '@better-i18n/expo';
+
+const mmkv = new MMKV({ id: 'app' });
+
+// Without localeKey — TranslationStorage (no locale persistence)
+storage: storageAdapter(mmkv)
+
+// With localeKey — LocaleAwareTranslationStorage (locale persisted)
+storage: storageAdapter(mmkv, { localeKey: '@app:locale' })
+```
+  </Tab>
+  <Tab value="AsyncStorage">
+```ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { storageAdapter } from '@better-i18n/expo';
+
+// Without localeKey — TranslationStorage (no locale persistence)
+storage: storageAdapter(AsyncStorage)
+
+// With localeKey — LocaleAwareTranslationStorage (locale persisted)
+storage: storageAdapter(AsyncStorage, { localeKey: '@app:locale' })
+```
+  </Tab>
+</Tabs>
+
+**`StorageAdapterOptions`**
+
+```ts
+interface StorageAdapterOptions {
+  /** Key used to persist the user's locale selection in storage. */
+  localeKey?: string;
+}
+```
+
+When `localeKey` is set, the returned adapter gains `readLocale()` / `writeLocale()` methods. `initBetterI18n` detects these via duck-type check and automatically reads the saved locale on startup.
+
+</AccordionItem>
+
+<AccordionItem title="LocaleAwareTranslationStorage">
+
+Extends `TranslationStorage` with locale persistence. Returned by `storageAdapter()` when `localeKey` is provided.
+
+```ts
+interface LocaleAwareTranslationStorage extends TranslationStorage {
+  /** Returns the previously saved locale, or null if none. */
+  readLocale(): Promise<string | null>;
+  /** Persists the given locale to storage. Called on every changeLanguage(). */
+  writeLocale(lng: string): Promise<void>;
+}
+```
+
+`initBetterI18n` uses duck-type detection at runtime: if the storage object has `readLocale` and `writeLocale` methods, it automatically calls `readLocale()` during startup to restore the user's last-selected language — before device locale detection and `defaultLocale` fallback.
+
+</AccordionItem>
+
+<AccordionItem title="TranslationStorage">
+
+Interface for pluggable storage adapters. Any key-value store that implements these three methods works.
+
+```ts
+interface TranslationStorage {
+  getItem(key: string): Promise<string | null>;
+  setItem(key: string, value: string): Promise<void>;
+  removeItem(key: string): Promise<void>;
+}
+```
+
+Compatible with: MMKV, AsyncStorage, SecureStore, or any custom implementation. Use `storageAdapter()` to wrap MMKV or AsyncStorage instances.
+
+</AccordionItem>
+
+<AccordionItem title="createMemoryStorage()">
+
+Creates an in-memory storage adapter backed by a `Map`. Useful for testing or when persistence is not needed.
+
+```ts
+import { createMemoryStorage } from '@better-i18n/expo';
+
+const storage = createMemoryStorage();
+
+await initBetterI18n({
+  projectId: 'acme/app',
+  i18n,
+  storage,
+});
+```
+
+**Returns:** `TranslationStorage`
+
+</AccordionItem>
+</Accordion>
+
+---
+
+## Types
+
+<Accordion>
+<AccordionItem title="LanguageOption">
+
+Represents an available language from the CDN manifest. Returned in the `languages` array from `initBetterI18n`.
+
+```ts
+interface LanguageOption {
+  /** Language code — "en", "tr", "az" */
+  code: string;
+  /** English name — "English", "Turkish" */
+  name?: string;
+  /** Native name — "English", "Türkçe" */
+  nativeName?: string;
+  /** URL to flag image (configured in dashboard) */
+  flagUrl?: string;
+  /** true for the source language */
+  isDefault?: boolean;
+}
+```
+
+</AccordionItem>
+
+<AccordionItem title="I18nCore">
+
+The core instance returned in `BetterI18nResult`. Provides low-level access to the CDN manifest and translation fetching.
+
+```ts
+interface I18nCore {
+  getLanguages(): Promise<LanguageOption[]>;
+  getMessages(locale: string): Promise<Messages>;
+  getManifest(): Promise<ManifestResponse>;
+}
+```
+
+</AccordionItem>
+
+<AccordionItem title="Exported Types">
+
+```ts
+import type {
+  // Primary API
+  InitBetterI18nOptions,
+  BetterI18nResult,
+
+  // Storage
+  TranslationStorage,
+  LocaleAwareTranslationStorage,
+  StorageAdapterOptions,
+
+  // Core types
+  LanguageOption,
+  ManifestResponse,
+  I18nCore,
+} from '@better-i18n/expo';
+```
+
+</AccordionItem>
+</Accordion>

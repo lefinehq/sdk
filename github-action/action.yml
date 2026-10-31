@@ -1,0 +1,114 @@
+name: Lefine Strings
+description: Push your app's source strings to Lefine, or open a pull request with the latest translations. A thin wrapper around the lefine CLI.
+author: Lefine
+branding:
+  icon: globe
+  color: purple
+
+inputs:
+  mode:
+    description: "push: send new and changed source texts to Lefine. pull: download the published translations and open (or update) a pull request. check: fail when the code names keys Lefine does not have, texts are untranslated, or texts lost a variable."
+    default: push
+  api-key:
+    description: "Optional. By default the action signs in with no stored secret: give the job permissions id-token write and trust the repository once (npx lefine ci trust add owner/name --project <app id>). Set this to a Lefine access key (the secret LEFINE_API_KEY) to use a key instead; it wins when set. push needs Read and write, check needs Read; pull reads the public CDN and needs none."
+    default: ""
+  app:
+    description: "The app's id (app_...). Default: from lefine.ts or i18n.config.ts in working-directory. Signing in with no secret needs the id (here or in lefine.ts)."
+    default: ""
+  working-directory:
+    description: Directory with lefine.ts or i18n.config.ts.
+    default: "."
+  source-file:
+    description: "push: the source locale file. Default: <output>/<default locale>.json."
+    default: ""
+  source-locale:
+    description: "push: the source locale (default: from the config). pull: the file the pull request never changes (default: en)."
+    default: ""
+  output:
+    description: "pull: where translations are written. Default: the config's pull.output, else ./locales."
+    default: ""
+  include-source:
+    description: "pull: also commit the source locale file. Off by default, so a pull request never reverts texts you pushed but did not publish."
+    default: "false"
+  fail-on:
+    description: "check: what fails the step, comma-separated: missing-keys, untranslated, text-warnings, unused-keys, or none (report only). Unused keys are a warning unless named here."
+    default: "missing-keys,untranslated,text-warnings"
+  comment:
+    description: "check: on a pull request, one comment with the missing and unused keys, updated on each run. Needs permissions pull-requests write. false turns it off."
+    default: "true"
+  cli-version:
+    description: The @lefine/cli version to run. Pinned on purpose. Signing in with no secret needs 0.9.0 or newer.
+    default: "0.1.0"
+  api-url:
+    description: Lefine API origin. Default https://dash.lefine.ai.
+    default: ""
+  cdn-url:
+    description: Lefine CDN origin for pull. Default https://cdn.lefine.ai.
+    default: ""
+  github-token:
+    description: "pull: the token that opens the pull request. A pull request opened with the default token does not start other workflows; pass a PAT or GitHub App token for that."
+    default: ${{ github.token }}
+  branch:
+    description: "pull: the branch the action owns and force-pushes."
+    default: lefine/strings
+  base:
+    description: "pull: the branch the pull request goes into. Default: the branch the workflow runs on."
+    default: ""
+  pr-title:
+    description: "pull: title of the pull request and the commit."
+    default: "Lefine: latest translations"
+
+outputs:
+  created:
+    description: "push: new texts sent to Lefine."
+    value: ${{ steps.run.outputs.created }}
+  updated:
+    description: "push: changed texts sent to Lefine."
+    value: ${{ steps.run.outputs.updated }}
+  skipped:
+    description: "push or pull: true when the step did nothing (a fork's pull request, nothing changed)."
+    value: ${{ steps.run.outputs.skipped }}
+  changed-files:
+    description: "pull: how many translation files changed."
+    value: ${{ steps.run.outputs.changed-files }}
+  missing-keys:
+    description: "check: names in the code with no key in Lefine."
+    value: ${{ steps.run.outputs.missing-keys }}
+  untranslated:
+    description: "check: texts the source has that other languages do not serve, summed over languages."
+    value: ${{ steps.run.outputs.untranslated }}
+  unused-keys:
+    description: "check: keys in Lefine that the code never uses (a warning unless fail-on names unused-keys)."
+    value: ${{ steps.run.outputs.unused-keys }}
+  text-warnings:
+    description: "check: texts waiting to be published that lost or added a variable or plural branch against their source."
+    value: ${{ steps.run.outputs.text-warnings }}
+  pr-url:
+    description: "pull: the pull request that was opened or updated."
+    value: ${{ steps.run.outputs.pr-url }}
+
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      # Inputs reach the script as env, never through ${{ }} in the script text (script injection).
+      env:
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_API_KEY: ${{ inputs.api-key }}
+        INPUT_APP: ${{ inputs.app }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_SOURCE_FILE: ${{ inputs.source-file }}
+        INPUT_SOURCE_LOCALE: ${{ inputs.source-locale }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_INCLUDE_SOURCE: ${{ inputs.include-source }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        INPUT_CLI_VERSION: ${{ inputs.cli-version }}
+        INPUT_API_URL: ${{ inputs.api-url }}
+        INPUT_CDN_URL: ${{ inputs.cdn-url }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_BRANCH: ${{ inputs.branch }}
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_PR_TITLE: ${{ inputs.pr-title }}
+      run: node "$GITHUB_ACTION_PATH/run.mjs"

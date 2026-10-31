@@ -1,0 +1,100 @@
+---
+title: Vanilla JS
+description: Content analytics for static sites, any framework, or no framework
+icon: Code
+---
+
+The vanilla adapter is a tiny, framework-free entrypoint. Drop it into any HTML page, static site, or non-React framework.
+
+## CDN (no install)
+
+```html
+<script type="module">
+  import { init, track } from 'https://esm.sh/@better-i18n/content/adapters/vanilla'
+
+  init({
+    projectId: 'your-org/your-project',
+    apiKey: 'bi_pub_xxxxx',
+  })
+
+  track('content.view', {
+    entryId: 'post-123',
+    contentModel: 'blog',
+    entrySlug: 'hello-world',
+    language: 'en',
+  })
+</script>
+```
+
+After `init()`, you can also call `window.betterContent.track(...)` from anywhere on the page.
+
+## npm (bundled)
+
+<Tabs items={['npm', 'bun', 'pnpm', 'yarn']}>
+  <Tab value="npm">
+    ```bash
+    npm install @better-i18n/content
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add @better-i18n/content
+    ```
+  </Tab>
+  <Tab value="pnpm">
+    ```bash
+    pnpm add @better-i18n/content
+    ```
+  </Tab>
+  <Tab value="yarn">
+    ```bash
+    yarn add @better-i18n/content
+    ```
+  </Tab>
+</Tabs>
+
+```ts title="src/analytics.ts"
+import { init, track } from '@better-i18n/content/adapters/vanilla'
+
+init({
+  projectId: process.env.BETTER_I18N_PROJECT_ID!,
+  apiKey: process.env.BETTER_I18N_KEY!,
+})
+
+// Call track() from anywhere
+track('content.view', {
+  entryId: post.id,
+  language: 'en',
+})
+```
+
+## Astro
+
+In Astro, the adapter goes in a client-side `<script>`:
+
+```astro title="src/layouts/Layout.astro"
+---
+const { post } = Astro.props
+---
+
+<script define:vars={{ post }}>
+  import { init, track } from 'https://esm.sh/@better-i18n/content/adapters/vanilla'
+
+  init({
+    projectId: import.meta.env.PUBLIC_BETTER_I18N_PROJECT_ID,
+    apiKey: import.meta.env.PUBLIC_BETTER_I18N_KEY,
+  })
+
+  track('content.view', {
+    entryId: post.id,
+    contentModel: 'blog',
+    entrySlug: post.slug,
+    language: post.locale,
+  })
+</script>
+```
+
+## Next steps
+
+- [Analytics API Reference](/sdk/analytics-api)
+- [Analytics Overview](/sdk/analytics)

@@ -1,0 +1,95 @@
+// Re-export common types from i18n-core
+export type {
+  Locale,
+  LogLevel,
+  ManifestLanguage,
+  ManifestFile,
+  ManifestResponse,
+  LanguageOption,
+  Messages,
+  Logger,
+  ParsedProject,
+} from "@better-i18n/core";
+
+import type { I18nCoreConfig, NormalizedConfig as CoreNormalizedConfig } from "@better-i18n/core";
+
+// Next.js-specific types
+
+export type LocalePrefix = "as-needed" | "always" | "never";
+
+/**
+ * Next.js i18n configuration (extends core config)
+ */
+export interface I18nConfig extends I18nCoreConfig {
+  /**
+   * URL locale prefix behavior
+   * @default "as-needed"
+   */
+  localePrefix?: LocalePrefix;
+
+  /**
+   * Cookie name used for locale persistence when localePrefix is "never"
+   * @default "locale"
+   */
+  cookieName?: string;
+
+  /**
+   * Cookie name written by `useSetLocale()` to mark the locale as an *explicit*
+   * user choice. The middleware reads this (but never writes it) so a callback
+   * can tell a deliberate pick apart from an auto-detected one — e.g. to apply
+   * a tenant/org default only for users who never chose themselves.
+   *
+   * Must match `detection.explicitCookieName` in your middleware config.
+   * @default `${cookieName}_explicit`
+   */
+  explicitCookieName?: string;
+
+  /**
+   * Next.js ISR revalidation time for manifest (seconds). The manifest is the
+   * only mutable document, so this is the publish-to-visible delay without a
+   * webhook (the manifest fetch is tagged `i18n-manifest`).
+   * @default 60
+   */
+  manifestRevalidateSeconds?: number;
+
+  /**
+   * Next.js ISR revalidation time for messages (seconds)
+   * @default 30
+   */
+  messagesRevalidateSeconds?: number;
+
+  /**
+   * IANA time zone identifier for consistent date/time formatting.
+   * When not provided, auto-detected via `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+   *
+   * Setting this explicitly avoids next-intl's `ENVIRONMENT_FALLBACK` warning
+   * and ensures consistent server/client rendering.
+   *
+   * @example "Europe/Istanbul"
+   * @example "America/New_York"
+   * @example "UTC"
+   */
+  timeZone?: string;
+}
+
+/**
+ * Normalized Next.js config with defaults
+ */
+export interface NormalizedConfig extends CoreNormalizedConfig, Omit<I18nConfig, keyof I18nCoreConfig> {
+  localePrefix: LocalePrefix;
+  cookieName: string;
+  explicitCookieName: string;
+  manifestRevalidateSeconds: number;
+  messagesRevalidateSeconds: number;
+}
+
+/**
+ * Next.js fetch request init with ISR options
+ */
+export type NextFetchRequestInit = RequestInit & {
+  next?: {
+    /** `false` caches indefinitely (immutable snapshot URLs). */
+    revalidate?: number | false;
+    tags?: string[];
+  };
+};

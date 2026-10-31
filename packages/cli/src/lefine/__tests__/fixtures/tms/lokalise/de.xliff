@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CONSTRUCTED from https://docs.lokalise.com/en/articles/1400816-xliff-xlf-xliff (example + state table + plural section). Whether Lokalise EXPORT writes target@state is NOT documented; state attr shown only as the import table reads it. -->
+<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
+  <file source-language="en" target-language="de" datatype="plaintext" original="common">
+    <body>
+      <trans-unit id="welcome" datatype="plaintext">
+        <source>Welcome, {name}!</source>
+        <target state="final">Willkommen, {name}!</target>
+      </trans-unit>
+      <trans-unit id="nav::save" datatype="plaintext">
+        <source>Save</source>
+        <target state="translated">Speichern</target>
+      </trans-unit>
+      <trans-unit id="nav::cancel" datatype="plaintext">
+        <source>Cancel</source>
+        <target state="needs-review-translation">Abbrechen</target>
+      </trans-unit>
+      <trans-unit id="items" datatype="plaintext">
+        <source>{"one":"{count} item","other":"{count} items"}</source>
+        <target>{"one":"{count} Artikel","other":"{count} Artikel"}</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

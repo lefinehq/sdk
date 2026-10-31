@@ -1,0 +1,16 @@
+{
+  "title": "Core",
+  "description": "Platform architecture, CDN delivery, and core utilities",
+  "icon": "Box",
+  "root": true,
+  "pages": [
+    "---Platform---",
+    "how-it-works",
+    "webhooks",
+    "---Package---",
+    "index",
+    "api-reference",
+    "selective-loading",
+    "locale-utilities"
+  ]
+}

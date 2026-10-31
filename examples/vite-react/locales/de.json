@@ -1,0 +1,8 @@
+{
+  "example": {
+    "title": "Hallo von Lefine",
+    "intro": "Diese Texte kommen aus dem Lefine-CDN. Ändere einen in Lefine, veröffentliche und lade neu.",
+    "clicks": "{count, plural, one {Du hast # Mal geklickt} other {Du hast # Mal geklickt}}",
+    "button": "Klicken"
+  }
+}

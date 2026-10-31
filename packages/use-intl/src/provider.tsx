@@ -1,0 +1,614 @@
+"use client";
+
+import { createI18nCore, getLocaleCookie } from "@better-i18n/core";
+import type { CacheStatus, CacheUpdateEvent, LanguageOption } from "@better-i18n/core";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { IntlProvider, type IntlErrorCode } from "use-intl";
+import { BetterI18nContext } from "./context.js";
+import { revalidateAndReport, sameStatus, subscribeToCoreUpdates } from "./cache-wiring.js";
+import type { BetterI18nProviderConfig, Messages } from "./types.js";
+
+// ─── Development-time error surface ─────────────────────────────────
+//
+// `use-intl` calls `onError` whenever a message lookup or ICU parse
+// fails (missing key, unmatched <tag>, malformed plural, etc). The
+// library's fallback is to return the key itself so the UI keeps
+// rendering — but that silent fallback is *devastating* for debugging
+// because the raw key appears on screen with zero console output.
+//
+// The previous default here was `() => {}` which made this invisible.
+// New default: log in development, stay silent in production. Consumer
+// can still pass their own `onError` to override (telemetry, Sentry,
+// etc).
+const isDevelopment =
+  typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
+
+function defaultOnError(error: {
+  code: IntlErrorCode;
+  message: string;
+  originalMessage?: string;
+}) {
+  if (!isDevelopment) return;
+  // MISSING_MESSAGE is by far the most common case — show the key name
+  // prominently so developers can jump straight to creating it. For
+  // format errors (INVALID_MESSAGE, FORMATTING_ERROR) include the
+  // original message so ICU parse failures like `<head>` are diagnosable
+  // without having to re-derive the source string.
+  const prefix = `[better-i18n] ${error.code}`;
+  if (error.originalMessage) {
+    console.warn(`${prefix}: ${error.message}\n  source: ${error.originalMessage}`);
+  } else {
+    console.warn(`${prefix}: ${error.message}`);
+  }
+}
+
+// ─── SSR Data Injection ──────────────────────────────────────────────
+
+/**
+ * Data injected by `@better-i18n/vite` plugin via `<script id="__better_i18n__">`.
+ */
+interface SSRData {
+  project: string;
+  locale: string;
+  messages: Messages;
+  languages: LanguageOption[];
+  localeCookie?: string;
+  supportedLocales?: string[];
+}
+
+/**
+ * Read SSR-injected translations from the DOM.
+ * Called once as a `useState` lazy initializer — synchronous, before first paint.
+ * This is the same pattern as helpcenter's `#__i18n_messages__` hydration.
+ */
+function readSSRData(): SSRData | null {
+  if (typeof document === "undefined") return null;
+  try {
+    const el = document.getElementById("__better_i18n__");
+    if (!el?.textContent) return null;
+    return JSON.parse(el.textContent);
+  } catch {
+    return null;
+  }
+}
+
+/** BCP 47 locale tag for URL segment detection. */
+const LOCALE_RE = /^[a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{1,8})*$/;
+
+// ─── Provider Props ──────────────────────────────────────────────────
+
+export interface BetterI18nProviderProps
+  extends Omit<BetterI18nProviderConfig, "project" | "locale"> {
+  children: ReactNode;
+  /**
+   * Project identifier in "org/project" format.
+   * Optional when using `@better-i18n/vite` plugin (auto-injected via `<script>` tag).
+   */
+  project?: string;
+  /**
+   * Current locale.
+   * Optional when using `@better-i18n/vite` plugin (auto-detected server-side).
+   */
+  locale?: string;
+  /** Pre-loaded languages from SSR loader — skips loading state on first render */
+  initialLanguages?: LanguageOption[];
+  /**
+   * URL prefix strategy for locale codes.
+   * - `"as-needed"` (default): default locale has no URL prefix
+   * - `"always"`: all locales get a URL prefix (e.g., TanStack Router `$locale/` routes)
+   * - `"never"`: no locale prefix in URL for any locale. Locale is stored only in cookie.
+   *   Ideal for dashboards and apps where URL structure shouldn't change per locale.
+   * @default "as-needed"
+   */
+  localePrefix?: "always" | "as-needed" | "never";
+  /**
+   * Called after a verified update replaced the active locale's messages
+   * (schema-2 manifests carry `revision`, `version`, `changesUrl`). The UI has
+   * already re-rendered with the new copy when this runs.
+   */
+  onUpdate?: (event: CacheUpdateEvent) => void;
+  /**
+   * Called with the cache state after each revalidation (`stale`, `revision`,
+   * `integrityFailures`, `storageError`). `useBetterI18n().cacheStatus` holds
+   * the latest one.
+   */
+  onCacheStatus?: (status: CacheStatus) => void;
+  /** Custom fallback when a message key is missing */
+  getMessageFallback?: (info: {
+    error: Error;
+    key: string;
+    namespace?: string;
+  }) => string;
+  /**
+   * Called when locale changes via `setLocale()` (e.g., from `LocaleDropdown`).
+   * In router-based apps, use this to trigger URL navigation:
+   *
+   * @example
+   * ```tsx
+   * <BetterI18nProvider
+   *   project="acme/web"
+   *   locale={locale}
+   *   onLocaleChange={(newLocale) => {
+   *     navigate({ to: `/${newLocale}${pathname}` })
+   *   }}
+   * >
+   * ```
+   */
+  onLocaleChange?: (locale: string) => void;
+
+  /**
+   * Persist the active locale to a cookie so returning visitors
+   * get their previously chosen language — even without geo-IP detection.
+   *
+   * - `true` — uses the default cookie name `"locale"`
+   * - `string` — custom cookie name (e.g., `"preferred-locale"`)
+   * - `false` / `undefined` — no persistence (default)
+   *
+   * **Read + write:** On mount, reads the cookie as a fallback when no SSR
+   * data is available (SPA/static builds). On every locale change, writes
+   * the cookie so the server can read it on the next visit.
+   *
+   * **Same name everywhere:** Use the same cookie name on the server
+   * (`localeCookie` on `createBetterAuthProvider` or Vite plugin) and
+   * in non-React code (`getLocaleCookie()` from `@better-i18n/core`).
+   *
+   * @example
+   * ```tsx
+   * <BetterI18nProvider project="acme/web" localeCookie>
+   *   <App />
+   * </BetterI18nProvider>
+   * ```
+   *
+   * @example
+   * ```tsx
+   * // Custom cookie name — must match server-side localeCookie option
+   * <BetterI18nProvider project="acme/web" localeCookie="preferred-locale">
+   *   <App />
+   * </BetterI18nProvider>
+   * ```
+   *
+   * @default false
+   */
+  localeCookie?: boolean | string;
+}
+
+/**
+ * Provider component that combines Better i18n CDN with use-intl
+ *
+ * Manages locale state internally, enabling locale switching via
+ * `setLocale()` from `useLocale()` or `useLocaleRouter()`.
+ *
+ * @example
+ * ```tsx
+ * // Plain Vite / React app (no router)
+ * function App() {
+ *   return (
+ *     <BetterI18nProvider project="acme/dashboard" locale="en">
+ *       <LocaleDropdown />
+ *       <MyComponent />
+ *     </BetterI18nProvider>
+ *   )
+ * }
+ *
+ * // TanStack Router SSR usage (pre-loaded messages from loader)
+ * function RootComponent() {
+ *   const { messages, locale } = Route.useLoaderData()
+ *   return (
+ *     <BetterI18nProvider
+ *       project="acme/dashboard"
+ *       locale={locale}
+ *       messages={messages}
+ *     >
+ *       <Outlet />
+ *     </BetterI18nProvider>
+ *   )
+ * }
+ * ```
+ */
+export function BetterI18nProvider({
+  children,
+  project: propProject,
+  locale: propLocale,
+  messages: propMessages,
+  timeZone,
+  now,
+  onError,
+  cdnBaseUrl,
+  debug,
+  logLevel,
+  fetch: customFetch,
+  storage,
+  staticData,
+  fetchTimeout,
+  retryCount,
+  namespaces,
+  initialLanguages: propInitialLanguages,
+  localePrefix = "as-needed",
+  getMessageFallback: customGetMessageFallback,
+  onLocaleChange,
+  localeCookie: localeCookieProp = false,
+  onUpdate,
+  onCacheStatus,
+}: BetterI18nProviderProps) {
+  // ─── SSR Data (from @better-i18n/vite plugin) ─────────────────────
+  // Read plugin-injected translations synchronously from DOM.
+  // Runs once as a lazy initializer — before first paint, zero FOUC.
+  const [ssrData] = useState(readSSRData);
+
+  // Resolve config: explicit props win over SSR-injected data
+  const project = propProject || ssrData?.project;
+  if (!project) {
+    throw new Error(
+      "[better-i18n] `project` is required. Pass it as a prop to BetterI18nProvider " +
+      "or use the @better-i18n/vite plugin.",
+    );
+  }
+
+  const initialMessages = propMessages || ssrData?.messages;
+  const initialLanguages = propInitialLanguages || ssrData?.languages;
+
+  // Resolve cookie name: prop > Vite plugin SSR data > none
+  // Same name is used for both reading (init) and writing (on locale change).
+  const cookieName = localeCookieProp === true
+    ? "locale"
+    : localeCookieProp || ssrData?.localeCookie || undefined;
+
+  // ─── Locale State ─────────────────────────────────────────────────
+  // Use a lazy initializer so cookie reads run exactly once (not on every render).
+  // Locale resolution chain: prop → cookie (if localeCookie) → SSR → "en"
+  // Cookie takes priority over SSR because SSR locale is baked at build-time
+  // (static builds always have "en"), while cookie reflects user's runtime choice.
+  const [managedLocale, setManagedLocale] = useState(() =>
+    propLocale
+    || (cookieName ? getLocaleCookie(cookieName) : null)
+    || ssrData?.locale
+    || "en"
+  );
+
+  // Sync when external prop changes (e.g., router navigation updates propLocale)
+  useEffect(() => {
+    if (propLocale) setManagedLocale(propLocale);
+  }, [propLocale]);
+
+  const locale = managedLocale;
+
+  // ─── Locale Persistence ──────────────────────────────────────────
+  // Write locale cookie on every change (including initial mount).
+  // This ensures returning visitors get their last-used language even
+  // without geo-IP detection (not everyone uses Cloudflare).
+  useEffect(() => {
+    if (!cookieName || typeof document === "undefined") return;
+    document.cookie = `${cookieName}=${locale}; path=/; max-age=31536000; SameSite=Lax`;
+  }, [locale, cookieName]);
+
+  // setLocale: updates internal state, persists cookie, updates URL, notifies parent
+  const setLocale = useCallback(
+    (newLocale: string) => {
+      setManagedLocale(newLocale);
+
+      // Write cookie immediately (before onLocaleChange navigation).
+      if (cookieName && typeof document !== "undefined") {
+        document.cookie = `${cookieName}=${newLocale};path=/;max-age=${60 * 60 * 24 * 365};SameSite=Lax`;
+      }
+
+      // Notify consumer (e.g., router navigation)
+      if (onLocaleChange) {
+        onLocaleChange(newLocale);
+        return;
+      }
+
+      // "never" mode: locale is cookie-only, don't touch the URL at all
+      if (localePrefix === "never") {
+        return;
+      }
+
+      // Update URL locale prefix — fallback when no external router handles it.
+      if (typeof window !== "undefined" && window.location) {
+        const path = window.location.pathname;
+        const segments = path.split("/").filter(Boolean);
+        const firstSegment = segments[0];
+        const supportedLocales = ssrData?.supportedLocales;
+        // Match BCP 47 tags: "en", "pt-BR", "zh-Hans" (2-8 alpha + optional subtags)
+        const isLocaleSegment =
+          firstSegment !== undefined &&
+          LOCALE_RE.test(firstSegment) &&
+          (!supportedLocales || supportedLocales.includes(firstSegment));
+        if (isLocaleSegment) {
+          segments[0] = newLocale;
+        } else {
+          segments.unshift(newLocale);
+        }
+        window.history.replaceState(null, "", `/${segments.join("/")}${window.location.search}`);
+      }
+    },
+    [onLocaleChange, cookieName, localePrefix, ssrData],
+  );
+
+  // ─── Messages State ───────────────────────────────────────────────
+  // Track the locale that initial messages were **actually built for**.
+  // When messages come from SSR (vite plugin), their locale is ssrData.locale.
+  // When messages come from props, their locale matches managedLocale at mount time.
+  // This distinction prevents a critical bug: propLocale="tr" + ssrData.messages="en"
+  // would incorrectly mark English messages as fresh for Turkish, skipping CDN fetch.
+  //
+  // Stored in state (not derived on each render) so it stays anchored to mount-time
+  // values even after locale switches cause re-renders.
+  const [initialMessagesLocale] = useState(() =>
+    propMessages ? managedLocale : ssrData?.locale
+  );
+
+  const [clientMessages, setClientMessages] = useState<Messages | undefined>();
+
+  // Use initial messages only when they match the current locale.
+  // After locale switch, fall through to clientMessages (CDN-fetched).
+  const isInitialMessagesFresh = initialMessages && initialMessagesLocale === locale;
+  const hasFreshInitial = Boolean(isInitialMessagesFresh);
+  const messages = isInitialMessagesFresh ? initialMessages : (clientMessages ?? initialMessages);
+  const [languages, setLanguages] = useState<LanguageOption[]>(initialLanguages ?? []);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(initialMessages === undefined);
+  const [isLoadingLanguages, setIsLoadingLanguages] = useState(!initialLanguages);
+
+  // Capture the locale that was active at mount — used as `defaultLocale` for
+  // the core instance. This must NOT change on locale switches: the core's
+  // `defaultLocale` is a startup hint for the CDN client, not the live locale.
+  // Putting `locale` in the deps would recreate the core (and its TtlCache) on
+  // every language switch, defeating the in-memory cache entirely.
+  const [mountLocale] = useState(locale);
+
+  // Create i18n core instance — stable for the lifetime of the provider.
+  const i18nCore = useMemo(
+    () =>
+      createI18nCore({
+        project,
+        defaultLocale: mountLocale,
+        cdnBaseUrl,
+        debug,
+        logLevel,
+        fetch: customFetch,
+        storage,
+        staticData,
+        fetchTimeout,
+        retryCount,
+      }),
+     
+    [project, cdnBaseUrl, debug, logLevel, customFetch, storage, staticData, fetchTimeout, retryCount]
+    // `mountLocale` intentionally excluded — it never changes after mount.
+    // `locale` intentionally excluded — see comment above.
+  );
+
+  // Namespace scope for CDN fetches. Routers hand a fresh array on every
+  // navigation, so the identity changes even when the set does not. Keying the
+  // memo on the sorted contents gives the effects below a value they can hold
+  // in their dependency list honestly: same set → same reference → no re-run,
+  // different set → re-run, which is exactly when the scope really changed.
+  const namespacesKey = namespaces ? [...namespaces].sort().join(",") : "";
+  const scopedNamespaces = useMemo(
+    () => (namespacesKey ? namespacesKey.split(",") : undefined),
+    [namespacesKey],
+  );
+
+  /* The revalidation effects below must NOT re-run when the scope changes.
+     A router hands a different namespace set on every navigation, and
+     revalidation asks "has a new version been published?" — a question whose
+     answer does not depend on which page you are looking at. Keeping the scope
+     in their dependency list forced a manifest read per navigation. They read
+     the latest scope from this ref at call time instead; it matters only for
+     the refetch that follows a version change, which should cover whatever the
+     page needs when it fires. */
+  const revalidateScopeRef = useRef(scopedNamespaces);
+  useEffect(() => {
+    revalidateScopeRef.current = scopedNamespaces;
+  }, [scopedNamespaces]);
+
+  // Latest cache state, and the host callbacks held in refs so a new function
+  // identity on a re-render does not resubscribe or re-run the revalidation.
+  const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
+  const onUpdateRef = useRef(onUpdate);
+  const onCacheStatusRef = useRef(onCacheStatus);
+  useEffect(() => {
+    onUpdateRef.current = onUpdate;
+    onCacheStatusRef.current = onCacheStatus;
+  }, [onUpdate, onCacheStatus]);
+  const reportStatus = useCallback((status: CacheStatus) => {
+    // `getStatus()` returns a fresh object each call; keep the old reference
+    // when nothing changed so a focus-triggered check does not re-render.
+    setCacheStatus((prev) => (prev && sameStatus(prev, status) ? prev : status));
+    onCacheStatusRef.current?.(status);
+  }, []);
+
+  // Load languages on mount — skip if SSR already provided them
+  useEffect(() => {
+    if (initialLanguages) return;
+
+    let cancelled = false;
+
+    const loadLanguages = async () => {
+      try {
+        const langs = await i18nCore.getLanguages();
+        if (!cancelled) {
+          setLanguages(langs);
+        }
+      } catch (error) {
+        console.error("[better-i18n] Failed to load languages:", error);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingLanguages(false);
+        }
+      }
+    };
+
+    loadLanguages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [i18nCore, initialLanguages]);
+
+  // Fetch messages only when the active locale has no payload on screen.
+  //
+  // - SSR/prop messages match the active locale → nothing to fetch. The payload
+  //   is already rendered, so downloading it again buys nothing. This effect
+  //   used to run `getMessages()` unconditionally, and because it passed no
+  //   `namespaces`, the client pulled EVERY namespace the manifest declares
+  //   even when the server had deliberately sent a narrow selection. On a
+  //   prerendered site each new document starts with an empty in-memory cache,
+  //   so that was a full re-download of data the user was already looking at.
+  //   Freshness is not lost: the revalidate effect below covers it with a
+  //   manifest version check instead of a payload download.
+  // - The SSR blob is for a different locale than the user is actually on
+  //   (common on static builds: blob=en, URL=/tr/...) → show the loader while
+  //   fetching the correct locale's messages.
+  useEffect(() => {
+    if (hasFreshInitial) return;
+
+    let cancelled = false;
+
+    const loadMessages = async () => {
+      setIsLoadingMessages(true);
+
+      try {
+        const msgs = await i18nCore.getMessages(locale, {
+          namespaces: scopedNamespaces,
+        });
+        if (!cancelled) {
+          setClientMessages(msgs as Messages);
+        }
+      } catch (error) {
+        console.error(
+          `[better-i18n] Failed to load messages for locale "${locale}":`,
+          error
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoadingMessages(false);
+        }
+      }
+    };
+
+    loadMessages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, i18nCore, hasFreshInitial, scopedNamespaces]);
+
+  // Freshness on mount: a prerendered document can be hours or days old, so the
+  // messages baked into it may predate the latest publish. `revalidate()` is a
+  // manifest-version check (ETag-aware, typically a single 304) and only pulls
+  // messages when the published version actually moved — the result arrives
+  // through `onMessagesUpdate` below. Deferred to idle so it never competes
+  // with hydration.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      void revalidateAndReport(i18nCore, locale, revalidateScopeRef.current, reportStatus);
+    };
+
+    // `requestIdleCallback` is absent on Safari < 16.4 — fall back to a timer.
+    const hasIdle = typeof window.requestIdleCallback === "function";
+    const handle: number = hasIdle
+      ? window.requestIdleCallback(run, { timeout: 2000 })
+      : window.setTimeout(run, 200);
+
+    return () => {
+      cancelled = true;
+      if (hasIdle) window.cancelIdleCallback(handle);
+      else window.clearTimeout(handle);
+    };
+  }, [locale, i18nCore, reportStatus]);
+
+  // Subscribe to background revalidation updates from the core.
+  // When a manifest-version-diff revalidation produces different messages for
+  // our active locale, swap them into state so the UI re-renders without a
+  // full reload. This is what lets newly published CMS keys show up on
+  // long-lived tabs — exactly the behavior `@better-i18n/next` gives via
+  // per-request SSR on the server.
+  useEffect(() => {
+    return subscribeToCoreUpdates(i18nCore, {
+      locale,
+      onMessages: setClientMessages,
+      onUpdate: (event) => onUpdateRef.current?.(event),
+      onStatus: reportStatus,
+    });
+  }, [i18nCore, locale, reportStatus]);
+
+  // Freshness triggers: ask the core to revalidate when the tab returns to
+  // the foreground or the window regains focus. `revalidate()` is a cheap
+  // manifest check (ETag-aware, typically 304) and only hits message CDN if
+  // the published version actually changed. De-duplicated in the core, so
+  // multiple triggers collapse to one round-trip.
+  //
+  // Infrastructure-agnostic: pure browser APIs, no CF/Worker coupling.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const trigger = () => {
+      void revalidateAndReport(i18nCore, locale, revalidateScopeRef.current, reportStatus);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") trigger();
+    };
+
+    window.addEventListener("focus", trigger);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", trigger);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [i18nCore, locale, reportStatus]);
+
+  const contextValue = useMemo(
+    () => ({
+      locale,
+      setLocale,
+      languages,
+      isLoadingLanguages,
+      isLoadingMessages,
+      project,
+      localePrefix,
+      cacheStatus,
+    }),
+    [locale, setLocale, languages, isLoadingLanguages, isLoadingMessages, project, localePrefix, cacheStatus]
+  );
+
+  if (!messages) {
+    // Render children with empty messages instead of blanking the screen.
+    // This converts a full DOM structural mismatch (null vs full tree)
+    // into a text content mismatch — React recovers silently and re-renders
+    // once the loader delivers real messages.
+    return (
+      <BetterI18nContext.Provider value={contextValue}>
+        <IntlProvider
+          locale={locale}
+          messages={{}}
+          timeZone={timeZone}
+          // Bootstrap phase — messages not yet loaded. Stay silent because
+          // the very first renders WILL miss every key until the CDN fetch
+          // resolves; logging each would flood the console.
+          onError={() => {}}
+          getMessageFallback={customGetMessageFallback}
+        >
+          {children as never}
+        </IntlProvider>
+      </BetterI18nContext.Provider>
+    );
+  }
+
+  return (
+    <BetterI18nContext.Provider value={contextValue}>
+      <IntlProvider
+        locale={locale}
+        messages={messages}
+        timeZone={timeZone}
+        now={now}
+        onError={onError ?? defaultOnError}
+        getMessageFallback={customGetMessageFallback}
+      >
+        {children as never}
+      </IntlProvider>
+    </BetterI18nContext.Provider>
+  );
+}

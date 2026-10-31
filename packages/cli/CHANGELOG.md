@@ -1,0 +1,215 @@
+# Changelog
+
+## 0.7.2
+
+### Patch Changes
+
+- The code scan behind `lefine doctor`, `lefine strings missing` and `lefine strings unused` knows lefine's own translators: `useStrings("ns")` (lefine/react), `getStrings(locale, "ns")` and `lefine.getStrings(...)` (lefine/server, lefine/next), and `createTranslator({ namespace })` (lefine/strings). Before, their keys were read without the namespace, so a lefine app saw its keys as missing and unused.
+
+## 0.7.1
+
+### Patch Changes
+
+- The CLI prints plain text when its output is not a terminal (CI logs, a pipe, a file) or `NO_COLOR` is set; `FORCE_COLOR` turns colors back on. Before, CI logs showed raw escape codes.
+
+## 0.7.0
+
+### Minor Changes
+
+- `pull` skips locales whose manifest sha256 matches the last verified pull and whose file is still on disk (schema-2 manifests only; `--force` downloads everything).
+- `pull` against a schema-2 manifest (Lefine CDN) reads the immutable snapshot URL and verifies each file against the manifest's `sha256` and `keyCount` before writing it: a `200 {}`, different bytes or a wrong text count fail that locale (non-zero exit) and nothing is written for it. The per-file `keyCount` decides, not the language row. New `pull --since <revision>` prints what changed on the CDN since that revision (from `changes.json`, read from the CDN the CLI was pointed at) before downloading; it says plainly when the list covers only the last release or is no longer available. `fetchRemoteKeys` (also used by `sync` and `doctor`) verifies the same way. Schema-1 manifests are read as before.
+
+  New `pull --cdn-url <origin>` reads from another CDN (a local edge, staging).
+
+## 0.6.2
+
+### Patch Changes
+
+- `pull` no longer writes empty locale files behind a successful exit.
+
+  Two problems, both reachable from a CI job:
+
+  - The CDN fallback URL was built as `/{org}/{project}/translations/{locale}.json`, but the published layout is `/{org}/{project}/{locale}/translations.json`. The CDN answers the wrong path with `200` and an empty `{}` instead of a `404`, so a bad URL was indistinguishable from an unpublished project.
+  - Nothing checked the downloaded file against the manifest, so a locale the manifest counts as non-empty could still land on disk as `{}` with a green `✓ 0 keys`.
+
+  `pull` now fails a locale when the manifest expects keys and the CDN returns none, writes nothing for it, and prints the reason without `--verbose`.
+
+## 0.6.1
+
+### Patch Changes
+
+- `--version` now reports the real package version (was hardcoded to 0.4.0).
+
+## 0.6.0
+
+### Minor Changes
+
+- `sync --push` creates the missing keys in Better i18n after comparison (confirm prompt, `-y` to skip, `-p org/project` override). Fixed the crash when a project has never been published: the empty CDN manifest now produces a clear "publish once and retry" warning instead of `Cannot read properties of undefined` errors, and sync now prints the next step when it finds missing keys.
+
+## 0.5.0
+
+### Minor Changes
+
+- Add full translation management to CLI — login, keys, translations, publish, languages, and sync monitoring.
+
+  New commands:
+  - `login` / `logout` / `whoami` — browser-based OAuth + API key auth (better-auth native)
+  - `projects` / `project` — list and inspect projects
+  - `keys list` / `keys create` / `keys delete` — key management with stdin JSON support
+  - `translate` — set translations in bulk via stdin JSON
+  - `translations` — get full translation text with search/filter
+  - `publish` / `publish:status` — deploy to CDN with pending changes preview
+  - `languages add` / `languages edit` — manage target languages
+  - `syncs list` / `syncs get` / `syncs cancel` — sync job monitoring
+
+  All commands support `--json` for machine-readable output and `--yes` to skip confirmations.
+  Every MCP tool now has a CLI equivalent — agents can use the CLI when MCP is unavailable.
+
+## 0.4.0
+
+### Minor Changes
+
+- Add `pull` command to download translations from CDN to local JSON files. Essential for mobile apps where bundled translations serve as offline fallback during App Store Review, airplane mode, or slow networks. Supports auto-detection from `i18n.config.ts` or `initBetterI18n()` calls, and a new `pull` config section for output directory and locale filtering.
+
+## 0.3.0
+
+### Minor Changes
+
+- Auto-detect i18n hooks, fix config parsing, modernize terminal output
+  - **Auto-detect hooks**: `useT`, `useTranslations`, `useTranslation`, `useScopedT` recognized without `translationFunctions` config
+  - **Fix config parsing**: Balanced bracket matching for `ignorePatterns` with regex character classes (e.g., `/[Bb]etter/`)
+  - **Fix unbound count**: Non-translation calls (useState, useEffect, etc.) no longer inflate the unbound translator count
+  - **Modern output**: Framed score card with dim borders, inline category bars, cleaner diagnostics
+
+## 0.2.6
+
+### Patch Changes
+
+- Fix doctor false positives and add comprehensive test suite
+  - Eliminate 216 false positives in doctor code analysis (jsx-attribute coordinate/hex/CSS filters, jsx-text decimal ignoring)
+  - Fix orphan-keys false positives in doctor diagnostics
+  - Add 260 new tests for doctor pipeline
+
+## 0.2.5
+
+### Patch Changes
+
+- Fix false positives in doctor code analysis: jsx-attribute rule now filters out coordinates, time strings, hex colors, CSS values, and identifiers. jsx-text rule now correctly ignores decimal numbers (e.g. "41.0082").
+
+## 0.2.4
+
+### Patch Changes
+
+- fix(cli): correct dashboard URLs and suppress CI exit code on successful report upload
+  - Fixed report URLs to use correct path: `/{org}/{project}/integrations/doctor?reportId={id}`
+  - API key path fallback uses full deep-link URL with org/project context
+  - OIDC path fallback trusts API response URL, falls back to base domain
+  - `--report --ci` no longer exits with code 1 when report uploads successfully
+
+## 0.2.3
+
+### Patch Changes
+
+- docs(cli): add doctor command documentation to README
+
+  The `better-i18n doctor` command was added in v0.2.0 but never documented in the README. Added full documentation including usage examples, health categories, CI integration, and example output.
+
+## 0.2.2
+
+### Patch Changes
+
+- fix(doctor): use relative file paths in diagnostic reports for cleaner dashboard display
+
+## 0.2.1
+
+### Patch Changes
+
+- fix(doctor): switch to occurrence-based health scoring
+
+  Each hardcoded string now penalizes the score independently instead of counting unique rules only. This gives more accurate scores that reflect actual i18n work remaining.
+
+## 0.2.0
+
+### Minor Changes
+
+- Add `doctor` command for i18n health analysis with CI integration.
+  - Detects missing translations, placeholder mismatches, and orphan keys
+  - Calculates health score (0-100) across 5 categories
+  - ESLint and JSON output formats
+  - `--report` flag uploads results to Better i18n via GitHub OIDC (zero secrets)
+  - `--ci` flag exits with error code if health score below threshold
+
+## 0.1.8
+
+### Patch Changes
+
+- Fix: Remove private workspace dependency from devDependencies
+
+  Removed `@better-i18n/typescript-config: workspace:*` from devDependencies. This was causing installation failures for consumers because the private package doesn't exist on npm and `workspace:*` couldn't be resolved during publish.
+
+All notable changes to @better-i18n/cli will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.1.7] - 2026-01-13
+
+### Fixed
+
+- **Critical**: `getTranslations("namespace")` now correctly detects namespaces in server components
+  - Previously, server-side translation calls were marked as dynamic/unknown
+  - Translation keys appeared in `root ()` instead of their correct namespace
+  - Affected all Next.js App Router users using server components
+  - Thanks to detailed user bug report with reproduction steps
+
+### Changed
+
+- Improved namespace detection logic for consistency between `useTranslations` and `getTranslations`
+- Updated documentation to reflect full server component support
+
+### Technical Details
+
+- Added string literal check for `getTranslations()` arguments in analyzer
+- Now supports all patterns:
+  - `getTranslations("namespace")` - Direct string literal
+  - `getTranslations({ locale, namespace: "namespace" })` - Object with namespace property
+  - `getTranslations()` - Root scoped (no namespace)
+
+### Documentation
+
+- Added server component examples to README
+- Added framework support comparison table
+- Clarified supported patterns for both client and server hooks
+
+## [0.1.6] - 2025-01-07
+
+### Added
+
+- Initial public release
+- Hardcoded string detection for React/Next.js apps
+- `better-i18n scan` command for static analysis
+- `better-i18n sync` command for cloud project comparison
+- Auto-config detection from `i18n.config.ts`
+- Support for `useTranslations()` hook detection
+- JSON and ESLint output formats
+- CI/CD integration with `--ci` flag
+- Git staged files support with `--staged` flag
+
+### Features
+
+- JSX text detection
+- JSX attribute detection
+- Ternary locale pattern detection
+- Smart filtering (CSS classes, URLs, constants)
+- Glob pattern support for include/exclude
+- Clickable file paths in VS Code terminal
+
+## [Unreleased]
+
+### Planned
+
+- Interactive mode for issue resolution
+- Auto-fix mode to wrap hardcoded strings
+- VS Code extension for real-time linting
+- Performance optimizations with AST caching
+- Enhanced stats with component type breakdown

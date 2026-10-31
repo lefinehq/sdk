@@ -1,0 +1,14 @@
+{
+  "title": "TanStack Start",
+  "icon": "TanStackIcon",
+  "defaultOpen": false,
+  "pages": [
+    "index",
+    "setup",
+    "ssr",
+    "selective-loading",
+    "routing",
+    "middleware",
+    "typescript"
+  ]
+}

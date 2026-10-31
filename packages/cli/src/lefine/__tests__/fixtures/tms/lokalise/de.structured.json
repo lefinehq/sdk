@@ -1,0 +1,8 @@
+{
+  "welcome": {
+    "translation": "Willkommen, {name}!",
+    "notes": "Greeting on the dashboard",
+    "tags": ["dashboard"]
+  },
+  "nav::save": { "translation": "Speichern", "limit": 20 }
+}

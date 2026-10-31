@@ -1,0 +1,28 @@
+msgid ""
+msgstr ""
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: POEditor.com\n"
+"Project-Id-Version: Spot\n"
+"Language: pl\n"
+"Plural-Forms: nplurals=4; plural=(n==1 ? 0 : (n%10>=2 && n%10<=4) && (n%100<12 || n%100>14) ? 1 : n!=1 && (n%10>=0 && n%10<=1) || (n%10>=5 && n%10<=9) || (n%100>=12 && n%100<=14) ? 2 : 3);\n"
+
+#. translators: This is part of a contextual menu attached to a single track; this entry allows viewing the album containing a specific track.
+#: src/app/components/labels.rs:5
+msgid "View album"
+msgstr "Zobacz album"
+
+#. translators: This is part of a contextual menu attached to a single track; the intent is to copy the link (public URL) to a specific track.
+#: src/app/components/labels.rs:8
+msgid "Copy link"
+msgstr "Skopiuj link"
+
+#. translators: This shows up when in selection mode. This text should be as short as possible.
+#: src/app/components/labels.rs:30
+msgid "{} song selected"
+msgid_plural "{} songs selected"
+msgstr[0] "{} wybrana piosenka"
+msgstr[1] "{} wybrane piosenki"
+msgstr[2] "{} wybranych piosenek"
+msgstr[3] ""

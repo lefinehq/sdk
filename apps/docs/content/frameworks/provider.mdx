@@ -1,0 +1,254 @@
+---
+title: Provider
+description: Configure the BetterI18nProvider for your application
+icon: Package
+---
+
+## Basic Usage
+
+### With Vite Plugin (zero config)
+
+When using [`@better-i18n/vite`](/frameworks/vite/setup), the provider reads everything from the injected `<script>` tag — no props needed:
+
+```tsx
+import { BetterI18nProvider } from '@better-i18n/use-intl'
+
+function App() {
+  return (
+    <BetterI18nProvider>
+      <YourApp />
+    </BetterI18nProvider>
+  )
+}
+```
+
+### Without Plugin (manual config)
+
+```tsx
+import { BetterI18nProvider } from '@better-i18n/use-intl'
+
+function App() {
+  return (
+    <BetterI18nProvider
+      projectId="your-org/your-project"
+      locale="en"
+    >
+      <YourApp />
+    </BetterI18nProvider>
+  )
+}
+```
+
+## Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `project` | `string` | With plugin: auto | Project identifier in `org/project` format |
+| `locale` | `string` | With plugin: auto | Current locale code (e.g., `"en"`, `"tr"`) |
+| `messages` | `Messages` | | Pre-loaded messages (for SSR) |
+| `localePrefix` | `"always" \| "as-needed"` | | URL prefix strategy (default: `"as-needed"`) |
+| `timeZone` | `string` | | Timezone for date formatting |
+| `now` | `Date` | | Current time (for SSR hydration) |
+| `localeCookie` | `boolean \| string` | | Persist locale to cookie. `true` = `"locale"`, string = custom name |
+| `onLocaleChange` | `(locale: string) => void` | | Callback when locale changes |
+| `onError` | `(error: IntlError) => void` | | Error handler for missing translations |
+| `cdnBaseUrl` | `string` | | Custom CDN URL |
+| `debug` | `boolean` | | Enable debug logging |
+| `logLevel` | `LogLevel` | | Logging verbosity |
+
+<Callout type="info">
+  When using the `@better-i18n/vite` plugin, `project`, `locale`, `messages`, and `languages` are all injected automatically via a `<script>` tag. You only need to pass props that you want to override.
+</Callout>
+
+## Client-Side Rendering
+
+For CSR apps, messages are fetched automatically:
+
+```tsx
+function App() {
+  const [locale, setLocale] = useState('en')
+
+  return (
+    <BetterI18nProvider
+      projectId="org/project"
+      locale={locale}
+      onLocaleChange={setLocale}
+    >
+      <YourApp />
+    </BetterI18nProvider>
+  )
+}
+```
+
+<Callout type="info">
+  Without pre-loaded `messages`, children won't render until messages are fetched from the CDN.
+</Callout>
+
+## Server-Side Rendering
+
+For SSR, pre-load messages to prevent flash of untranslated content:
+
+```tsx
+import { getMessages } from '@better-i18n/use-intl/server'
+
+// In your loader
+const messages = await getMessages({
+  projectId: 'org/project',
+  locale: 'en',
+})
+
+// In your component
+<BetterI18nProvider
+  projectId="org/project"
+  locale="en"
+  messages={messages} // [!code highlight]
+  timeZone="UTC" // [!code highlight]
+>
+  <YourApp />
+</BetterI18nProvider>
+```
+
+<Callout type="warning">
+  **Timezone Requirement:** For SSR, always set `timeZone` to prevent hydration mismatches. Use `"UTC"` as a safe default.
+</Callout>
+
+## Locale Persistence
+
+Use the `localeCookie` prop to persist the user's language choice across page refreshes:
+
+```tsx
+<BetterI18nProvider
+  projectId="org/project"
+  localeCookie // [!code highlight]
+>
+  <App />
+</BetterI18nProvider>
+```
+
+This does two things:
+1. **Writes** a cookie on every locale change (including initial mount)
+2. **Reads** the cookie on initialization as a fallback (for SPA/static builds)
+
+### Options
+
+| Value | Cookie Name | Use Case |
+|-------|------------|----------|
+| `true` | `"locale"` | Most apps — simple default |
+| `"preferred-locale"` | `"preferred-locale"` | Custom name to match your server |
+| `false` (default) | — | SSR apps with middleware (cookie handled server-side) |
+
+### Server-side pairing
+
+Use the same cookie name on both client and server:
+
+```tsx title="Client"
+<BetterI18nProvider localeCookie="preferred-locale" />
+```
+
+```ts title="Server (Better Auth)"
+createBetterAuthProvider(i18n, { localeCookie: "preferred-locale" })
+```
+
+```ts title="Server (Vite plugin)"
+betterI18n({ localeCookie: "preferred-locale" })
+```
+
+<Callout type="tip">
+  The cookie name must match across client and server. When using `localeCookie` (boolean `true`), the default name is `"locale"`.
+</Callout>
+
+### Non-React contexts
+
+Read the cookie outside React (auth clients, analytics, fetch wrappers):
+
+```ts
+import { getLocaleCookie } from "@better-i18n/core";
+
+const locale = getLocaleCookie("locale"); // → "tr" | null
+```
+
+See [Better Auth integration](/frameworks/server-sdk/better-auth#locale-detection) for the full pattern.
+```
+
+## Error Handling
+
+Handle missing translations gracefully:
+
+```tsx
+<BetterI18nProvider
+  projectId="org/project"
+  locale="en"
+  onError={(error) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(`Missing translation: ${error.message}`)
+    }
+    // In production, you might want to report to error tracking
+  }}
+>
+  <YourApp />
+</BetterI18nProvider>
+```
+
+## Debug Mode
+
+Enable debug logging during development:
+
+```tsx
+<BetterI18nProvider
+  projectId="org/project"
+  locale="en"
+  debug={process.env.NODE_ENV === 'development'}
+  logLevel="debug"
+>
+  <YourApp />
+</BetterI18nProvider>
+```
+
+This logs:
+- CDN requests and responses
+- Cache hits and misses
+- Locale changes
+- Message loading states
+
+## Custom CDN
+
+For enterprise or self-hosted deployments:
+
+```tsx
+<BetterI18nProvider
+  projectId="org/project"
+  locale="en"
+  cdnBaseUrl="https://cdn.your-company.com"
+>
+  <YourApp />
+</BetterI18nProvider>
+```
+
+## Types
+
+```ts
+interface BetterI18nProviderConfig {
+  projectId: string
+  locale: string
+  messages?: Messages
+  timeZone?: string
+  now?: Date
+  onLocaleChange?: (locale: string) => void
+  onError?: (error: IntlError) => void
+  cdnBaseUrl?: string
+  debug?: boolean
+  logLevel?: 'debug' | 'info' | 'warn' | 'error' | 'silent'
+}
+
+type Messages = {
+  [namespace: string]: {
+    [key: string]: string | Messages
+  }
+}
+```
+
+## Related
+
+- [Locale Management](/frameworks/locale) - Access locale from context
+- [Server Utilities](/frameworks/server) - Pre-load messages for SSR
+- [Translations](/frameworks/translations) - Access translations in components

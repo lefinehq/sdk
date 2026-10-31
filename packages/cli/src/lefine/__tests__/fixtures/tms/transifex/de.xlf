@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file datatype="plaintext" original="locales/en.json" source-language="en" target-language="de">
+    <body>
+      <trans-unit approved="yes" id="welcome" xml:space="preserve">
+        <source>Welcome, {name}!</source>
+        <target>Willkommen, {name}!</target>
+      </trans-unit>
+      <trans-unit approved="no" id="nav.save" xml:space="preserve">
+        <source>Save</source>
+        <target>Speichern</target>
+      </trans-unit>
+      <trans-unit id="nav.cancel">
+        <source>Cancel</source>
+      </trans-unit>
+      <group restype="x-gettext-plurals">
+        <trans-unit id="trial[0]" xml:space="preserve"><source>Your trial ends in 1 day</source><target>Deine Testphase endet in 1 Tag</target></trans-unit>
+        <trans-unit id="trial[1]" xml:space="preserve"><source>Your trial ends in {count} days</source><target>Deine Testphase endet in {count} Tagen</target></trans-unit>
+      </group>
+    </body>
+  </file>
+</xliff>

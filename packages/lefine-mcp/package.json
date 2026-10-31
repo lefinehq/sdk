@@ -1,0 +1,41 @@
+{
+  "name": "@lefine/mcp",
+  "version": "0.2.7",
+  "description": "Lefine as an MCP server for Claude Desktop, Cursor and other agents (same as `npx lefine mcp`)",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "lefine-mcp": "./bin/lefine-mcp.js"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lefinehq/sdk.git",
+    "directory": "packages/lefine-mcp"
+  },
+  "homepage": "https://lefine.ai",
+  "keywords": [
+    "lefine",
+    "mcp",
+    "model-context-protocol",
+    "i18n",
+    "localization",
+    "claude"
+  ],
+  "scripts": {
+    "check:package": "bunx publint@0.3.25 --strict"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "lefine": "workspace:^"
+  }
+}

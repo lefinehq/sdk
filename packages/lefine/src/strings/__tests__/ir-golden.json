@@ -1,0 +1,1155 @@
+{
+ "format": 1,
+ "cases": [
+  {
+   "text": "Welcome",
+   "ir": "Welcome"
+  },
+  {
+   "text": "",
+   "ir": ""
+  },
+  {
+   "text": "It''s '{literal}'",
+   "ir": "It's {literal}"
+  },
+  {
+   "text": "a '{b}' c",
+   "ir": "a {b} c"
+  },
+  {
+   "text": "x '' y",
+   "ir": "x ' y"
+  },
+  {
+   "text": "'<b>' t",
+   "ir": "<b> t"
+  },
+  {
+   "text": "'#' {n, plural, other {'#' #}}",
+   "ir": [
+    "'#' ",
+    [
+     "n",
+     2,
+     {
+      "other": [
+       "# ",
+       0
+      ]
+     }
+    ]
+   ]
+  },
+  {
+   "text": "Hello {name}!",
+   "ir": [
+    "Hello ",
+    [
+     "name"
+    ],
+    "!"
+   ]
+  },
+  {
+   "text": "{ name }",
+   "ir": [
+    [
+     "name"
+    ]
+   ]
+  },
+  {
+   "text": "<b>x</b>",
+   "ir": [
+    [
+     "b",
+     7,
+     "x"
+    ]
+   ]
+  },
+  {
+   "text": "<br/>",
+   "ir": "<br/>"
+  },
+  {
+   "text": "a < b",
+   "ir": "a < b"
+  },
+  {
+   "text": "Read <b>the {doc}</b>",
+   "ir": [
+    "Read ",
+    [
+     "b",
+     7,
+     "the ",
+     [
+      "doc"
+     ]
+    ]
+   ]
+  },
+  {
+   "text": "<br></br>",
+   "ir": [
+    [
+     "br",
+     7
+    ]
+   ]
+  },
+  {
+   "text": "<b>{n, plural, other {#}}</b>",
+   "ir": [
+    [
+     "b",
+     7,
+     [
+      "n",
+      2,
+      {
+       "other": [
+        0
+       ]
+      }
+     ]
+    ]
+   ]
+  },
+  {
+   "text": "{n, plural, =0 {none} one {# item} other {# items}}",
+   "ir": [
+    [
+     "n",
+     2,
+     {
+      "=0": "none",
+      "one": [
+       0,
+       " item"
+      ],
+      "other": [
+       0,
+       " items"
+      ]
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{n, plural, offset:1 =0 {nobody} one {you and # other} other {you and # others}}",
+   "ir": [
+    [
+     "n",
+     2,
+     {
+      "=0": "nobody",
+      "one": [
+       "you and ",
+       0,
+       " other"
+      ],
+      "other": [
+       "you and ",
+       0,
+       " others"
+      ]
+     },
+     1
+    ]
+   ]
+  },
+  {
+   "text": "{n, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}",
+   "ir": [
+    [
+     "n",
+     3,
+     {
+      "one": [
+       0,
+       "st"
+      ],
+      "two": [
+       0,
+       "nd"
+      ],
+      "few": [
+       0,
+       "rd"
+      ],
+      "other": [
+       0,
+       "th"
+      ]
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{g, select, female {She} other {They}}",
+   "ir": [
+    [
+     "g",
+     1,
+     {
+      "female": "She",
+      "other": "They"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{n, plural, other {{g, select, other {#}}}}",
+   "ir": [
+    [
+     "n",
+     2,
+     {
+      "other": [
+       [
+        "g",
+        1,
+        {
+         "other": "#"
+        }
+       ]
+      ]
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{p, number}",
+   "ir": [
+    [
+     "p",
+     4
+    ]
+   ]
+  },
+  {
+   "text": "{p, number, percent}",
+   "ir": [
+    [
+     "p",
+     4,
+     {
+      "style": "percent"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{p, number, integer}",
+   "ir": [
+    [
+     "p",
+     4,
+     {
+      "maximumFractionDigits": 0
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{p, number, money}",
+   "ir": [
+    [
+     "p",
+     4,
+     "money"
+    ]
+   ]
+  },
+  {
+   "text": "{p, number, ::currency/EUR .00}",
+   "ir": [
+    [
+     "p",
+     4,
+     {
+      "style": "currency",
+      "currency": "EUR",
+      "minimumFractionDigits": 2,
+      "maximumFractionDigits": 2
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{p, number, ::compact-short}",
+   "ir": [
+    [
+     "p",
+     4,
+     {
+      "notation": "compact",
+      "compactDisplay": "short"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{p, number, ::unit/kilometer unit-width-full-name}",
+   "ir": [
+    [
+     "p",
+     4,
+     {
+      "style": "unit",
+      "unit": "kilometer",
+      "currencyDisplay": "name",
+      "unitDisplay": "long"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{p, number, ::.0#}",
+   "ir": [
+    [
+     "p",
+     4,
+     {
+      "minimumFractionDigits": 1,
+      "maximumFractionDigits": 2
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{p, number, ::@@#}",
+   "ir": [
+    [
+     "p",
+     4,
+     {
+      "minimumSignificantDigits": 2,
+      "maximumSignificantDigits": 3
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{d, date}",
+   "ir": [
+    [
+     "d",
+     5
+    ]
+   ]
+  },
+  {
+   "text": "{d, date, short}",
+   "ir": [
+    [
+     "d",
+     5,
+     {
+      "month": "numeric",
+      "day": "numeric",
+      "year": "2-digit"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{d, date, full}",
+   "ir": [
+    [
+     "d",
+     5,
+     {
+      "weekday": "long",
+      "month": "long",
+      "day": "numeric",
+      "year": "numeric"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{d, time, short}",
+   "ir": [
+    [
+     "d",
+     6,
+     {
+      "hour": "numeric",
+      "minute": "numeric"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{d, date, ::yMMMd}",
+   "ir": [
+    [
+     "d",
+     5,
+     {
+      "year": "numeric",
+      "month": "short",
+      "day": "numeric"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{d, time, ::Hmm}",
+   "ir": [
+    [
+     "d",
+     6,
+     {
+      "hourCycle": "h23",
+      "hour": "numeric",
+      "minute": "2-digit"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{d, time, ::hhmma}",
+   "ir": [
+    [
+     "d",
+     6,
+     {
+      "hourCycle": "h12",
+      "hour": "2-digit",
+      "minute": "2-digit",
+      "hour12": true
+     }
+    ]
+   ]
+  },
+  {
+   "text": "{n, plural, one {x}}",
+   "error": true
+  },
+  {
+   "text": "{unclosed",
+   "error": true
+  },
+  {
+   "text": "<b>x",
+   "error": true
+  },
+  {
+   "text": "</b>",
+   "error": true
+  },
+  {
+   "text": "{a, foo}",
+   "error": true
+  },
+  {
+   "text": "{p, number, ::scale/100}",
+   "error": true
+  },
+  {
+   "text": "{p, number, ::currency/EURO}",
+   "error": true
+  },
+  {
+   "text": "{h, time, ::jm}",
+   "error": true
+  },
+  {
+   "text": "{count} min read",
+   "ir": [
+    [
+     "count"
+    ],
+    " min read"
+   ]
+  },
+  {
+   "text": "{minutes} minutes",
+   "ir": [
+    [
+     "minutes"
+    ],
+    " minutes"
+   ]
+  },
+  {
+   "text": "Showing {count} posts",
+   "ir": [
+    "Showing ",
+    [
+     "count"
+    ],
+    " posts"
+   ]
+  },
+  {
+   "text": "Page {page}",
+   "ir": [
+    "Page ",
+    [
+     "page"
+    ]
+   ]
+  },
+  {
+   "text": "{total} steps become {remaining}",
+   "ir": [
+    [
+     "total"
+    ],
+    " steps become ",
+    [
+     "remaining"
+    ]
+   ]
+  },
+  {
+   "text": "Lefine vs {name}",
+   "ir": [
+    "Lefine vs ",
+    [
+     "name"
+    ]
+   ]
+  },
+  {
+   "text": "Translate {code} to Turkish",
+   "ir": [
+    "Translate ",
+    [
+     "code"
+    ],
+    " to Turkish"
+   ]
+  },
+  {
+   "text": "better-i18n[bot] pushed to {branch}",
+   "ir": [
+    "better-i18n[bot] pushed to ",
+    [
+     "branch"
+    ]
+   ]
+  },
+  {
+   "text": "What {name} gives you",
+   "ir": [
+    "What ",
+    [
+     "name"
+    ],
+    " gives you"
+   ]
+  },
+  {
+   "text": "Connect {name} today",
+   "ir": [
+    "Connect ",
+    [
+     "name"
+    ],
+    " today"
+   ]
+  },
+  {
+   "text": "Connect {name} to your workflow",
+   "ir": [
+    "Connect ",
+    [
+     "name"
+    ],
+    " to your workflow"
+   ]
+  },
+  {
+   "text": "Get {name} running",
+   "ir": [
+    "Get ",
+    [
+     "name"
+    ],
+    " running"
+   ]
+  },
+  {
+   "text": "Publish to the CDN edge or push translations back to {name}. Copy changes go live without triggering a new app deploy.",
+   "ir": [
+    "Publish to the CDN edge or push translations back to ",
+    [
+     "name"
+    ],
+    ". Copy changes go live without triggering a new app deploy."
+   ]
+  },
+  {
+   "text": "Pull source strings from your codebase or connect your {name} repository. Keys arrive in Lefine with structure and context intact.",
+   "ir": [
+    "Pull source strings from your codebase or connect your ",
+    [
+     "name"
+    ],
+    " repository. Keys arrive in Lefine with structure and context intact."
+   ]
+  },
+  {
+   "text": "How {name} works inside Lefine",
+   "ir": [
+    "How ",
+    [
+     "name"
+    ],
+    " works inside Lefine"
+   ]
+  },
+  {
+   "text": "{count} results",
+   "ir": [
+    [
+     "count"
+    ],
+    " results"
+   ]
+  },
+  {
+   "text": "Last updated: {date}",
+   "ir": [
+    "Last updated: ",
+    [
+     "date"
+    ]
+   ]
+  },
+  {
+   "text": "Real feedback from {competitor} users on review platforms",
+   "ir": [
+    "Real feedback from ",
+    [
+     "competitor"
+    ],
+    " users on review platforms"
+   ]
+  },
+  {
+   "text": "What {competitor} users say",
+   "ir": [
+    "What ",
+    [
+     "competitor"
+    ],
+    " users say"
+   ]
+  },
+  {
+   "text": "Lefine vs {name}",
+   "ir": [
+    "Lefine vs ",
+    [
+     "name"
+    ]
+   ]
+  },
+  {
+   "text": "Why switch from {competitor}?",
+   "ir": [
+    "Why switch from ",
+    [
+     "competitor"
+    ],
+    "?"
+   ]
+  },
+  {
+   "text": "Dynamic key patterns like template literals are detected automatically. When your code uses t(`key.$'{variable}'`), the CLI recognizes the dynamic segment and includes it in pattern-matched reports, so nothing slips through the cracks.",
+   "ir": "Dynamic key patterns like template literals are detected automatically. When your code uses t(`key.${variable}`), the CLI recognizes the dynamic segment and includes it in pattern-matched reports, so nothing slips through the cracks."
+  },
+  {
+   "text": "Use ICU MessageFormat placeholders for interpolation (e.g., 'Hello, {name}') instead of concatenating strings. For plurals, use ICU plural syntax that adapts to each language's rules. Avoid building sentences from fragments, since word order varies across languages. For rich text, use tagged placeholders that let translators reorder HTML elements without breaking markup.",
+   "ir": [
+    "Use ICU MessageFormat placeholders for interpolation (e.g., 'Hello, ",
+    [
+     "name"
+    ],
+    "') instead of concatenating strings. For plurals, use ICU plural syntax that adapts to each language's rules. Avoid building sentences from fragments, since word order varies across languages. For rich text, use tagged placeholders that let translators reorder HTML elements without breaking markup."
+   ]
+  },
+  {
+   "text": "Pluralization support with ngettext and {% blocktranslate count %}",
+   "error": true
+  },
+  {
+   "text": "Template tags {% translate %} and {% blocktranslate %} for in-template translations",
+   "error": true
+  },
+  {
+   "text": "Verifies interpolation placeholders are consistent across all locales. Supports named '{}', double-brace '{{}}', printf %s, template $'{}', and positional '{0}' formats.",
+   "ir": "Verifies interpolation placeholders are consistent across all locales. Supports named {}, double-brace {{}}, printf %s, template ${}, and positional {0} formats."
+  },
+  {
+   "text": "Hreflang tags are HTML link elements placed in the <head> of each page that tell search engines which language and regional version of a page to serve to users. Each page lists all its language variants, including itself. The x-default value indicates the fallback page for users whose language is not specifically targeted. Correct implementation prevents duplicate content issues across language versions.",
+   "error": true
+  },
+  {
+   "text": "Variable interpolation with %{variable} syntax in translation strings",
+   "ir": [
+    "Variable interpolation with %",
+    [
+     "variable"
+    ],
+    " syntax in translation strings"
+   ]
+  },
+  {
+   "text": "Messages reach vue-i18n exactly as authored in the dashboard, and vue-i18n resolves them at render time. Note that vue-i18n has its own message syntax: plurals are pipe-separated ('no items | one item | '{count}' items') rather than ICU, so author plural keys in that form, or register a custom message compiler built on intl-messageformat if your team writes ICU. When AI translates an ICU message, an automatic check flags any translation that drops a plural branch, renames a variable or loses the # placeholder.",
+   "ir": "Messages reach vue-i18n exactly as authored in the dashboard, and vue-i18n resolves them at render time. Note that vue-i18n has its own message syntax: plurals are pipe-separated ('no items | one item | {count} items') rather than ICU, so author plural keys in that form, or register a custom message compiler built on intl-messageformat if your team writes ICU. When AI translates an ICU message, an automatic check flags any translation that drops a plural branch, renames a variable or loses the # placeholder."
+  },
+  {
+   "text": "Publishing writes to R2 and fires a CDN purge, and the CDN sets max-age=60 on translations. The client's in-memory cache keys messages by the version the manifest advertises, so once the cached manifest expires (5 minutes by default in production, 30 seconds in development) the next getMessages() call picks up the new strings — no redeploy, no bundle rebuild. Call getManifest('{ forceRefresh: true }') if you need to bypass the cache during QA.",
+   "ir": "Publishing writes to R2 and fires a CDN purge, and the CDN sets max-age=60 on translations. The client's in-memory cache keys messages by the version the manifest advertises, so once the cached manifest expires (5 minutes by default in production, 30 seconds in development) the next getMessages() call picks up the new strings — no redeploy, no bundle rebuild. Call getManifest({ forceRefresh: true }) if you need to bypass the cache during QA."
+  },
+  {
+   "text": "Billed yearly ({total})",
+   "ir": [
+    "Billed yearly (",
+    [
+     "total"
+    ],
+    ")"
+   ]
+  },
+  {
+   "text": "{name} integration — Lefine",
+   "ir": [
+    [
+     "name"
+    ],
+    " integration — Lefine"
+   ]
+  },
+  {
+   "text": "Billed yearly at {total}",
+   "ir": [
+    "Billed yearly at ",
+    [
+     "total"
+    ]
+   ]
+  },
+  {
+   "text": "{pct}% less",
+   "ir": [
+    [
+     "pct"
+    ],
+    "% less"
+   ]
+  },
+  {
+   "text": "Everything in {plan}, plus:",
+   "ir": [
+    "Everything in ",
+    [
+     "plan"
+    ],
+    ", plus:"
+   ]
+  },
+  {
+   "text": "For privacy-related questions, contact us at <a>privacy@better-i18n.com</a>.",
+   "ir": [
+    "For privacy-related questions, contact us at ",
+    [
+     "a",
+     7,
+     "privacy@better-i18n.com"
+    ],
+    "."
+   ]
+  },
+  {
+   "text": "<strong>AI Translation Providers:</strong> When you use AI translation features, content is sent to AI providers. We never use your content to train AI models.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "AI Translation Providers:"
+    ],
+    " When you use AI translation features, content is sent to AI providers. We never use your content to train AI models."
+   ]
+  },
+  {
+   "text": "<strong>Business Transfers:</strong> In connection with a merger, acquisition, or sale of assets.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Business Transfers:"
+    ],
+    " In connection with a merger, acquisition, or sale of assets."
+   ]
+  },
+  {
+   "text": "<strong>Legal Requirements:</strong> When required by law or to protect our rights.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Legal Requirements:"
+    ],
+    " When required by law or to protect our rights."
+   ]
+  },
+  {
+   "text": "<strong>Service Providers:</strong> Third parties that help us operate our services (hosting, analytics, payment processing).",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Service Providers:"
+    ],
+    " Third parties that help us operate our services (hosting, analytics, payment processing)."
+   ]
+  },
+  {
+   "text": "<strong>Improve Services:</strong> Analyze usage patterns to enhance our platform.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Improve Services:"
+    ],
+    " Analyze usage patterns to enhance our platform."
+   ]
+  },
+  {
+   "text": "<strong>Process Payments:</strong> Handle billing and subscription management.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Process Payments:"
+    ],
+    " Handle billing and subscription management."
+   ]
+  },
+  {
+   "text": "<strong>Communicate:</strong> Send service updates, security alerts, and support messages.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Communicate:"
+    ],
+    " Send service updates, security alerts, and support messages."
+   ]
+  },
+  {
+   "text": "<strong>Legal Compliance:</strong> Meet our legal and regulatory obligations.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Legal Compliance:"
+    ],
+    " Meet our legal and regulatory obligations."
+   ]
+  },
+  {
+   "text": "<strong>Ensure Security:</strong> Detect and prevent fraud or abuse.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Ensure Security:"
+    ],
+    " Detect and prevent fraud or abuse."
+   ]
+  },
+  {
+   "text": "<strong>Provide Services:</strong> Operate and maintain our localization platform.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Provide Services:"
+    ],
+    " Operate and maintain our localization platform."
+   ]
+  },
+  {
+   "text": "At <strong>Better I18N</strong>, we take your privacy seriously. This policy explains what information we collect, how we use it, and your rights regarding your personal data.",
+   "ir": [
+    "At ",
+    [
+     "strong",
+     7,
+     "Better I18N"
+    ],
+    ", we take your privacy seriously. This policy explains what information we collect, how we use it, and your rights regarding your personal data."
+   ]
+  },
+  {
+   "text": "<strong>Cookies:</strong> We use essential cookies for authentication and preferences.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Cookies:"
+    ],
+    " We use essential cookies for authentication and preferences."
+   ]
+  },
+  {
+   "text": "<strong>Device Information:</strong> Browser type, operating system, and IP address.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Device Information:"
+    ],
+    " Browser type, operating system, and IP address."
+   ]
+  },
+  {
+   "text": "<strong>Usage Data:</strong> Pages visited, features used, and actions taken on our platform.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Usage Data:"
+    ],
+    " Pages visited, features used, and actions taken on our platform."
+   ]
+  },
+  {
+   "text": "<strong>Account Information:</strong> Name, email address, and password when you create an account.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Account Information:"
+    ],
+    " Name, email address, and password when you create an account."
+   ]
+  },
+  {
+   "text": "<strong>Communications:</strong> Messages you send us for support or feedback.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Communications:"
+    ],
+    " Messages you send us for support or feedback."
+   ]
+  },
+  {
+   "text": "<strong>Content:</strong> Translation content and project data you upload to our platform.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Content:"
+    ],
+    " Translation content and project data you upload to our platform."
+   ]
+  },
+  {
+   "text": "<strong>Payment Information:</strong> Billing address and payment details (processed by our payment provider).",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Payment Information:"
+    ],
+    " Billing address and payment details (processed by our payment provider)."
+   ]
+  },
+  {
+   "text": "<strong>Access:</strong> Request a copy of your personal data.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Access:"
+    ],
+    " Request a copy of your personal data."
+   ]
+  },
+  {
+   "text": "<strong>Deletion:</strong> Request deletion of your personal data.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Deletion:"
+    ],
+    " Request deletion of your personal data."
+   ]
+  },
+  {
+   "text": "<strong>Opt-out:</strong> Unsubscribe from marketing communications.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Opt-out:"
+    ],
+    " Unsubscribe from marketing communications."
+   ]
+  },
+  {
+   "text": "Day {day}: 100% uptime",
+   "ir": [
+    "Day ",
+    [
+     "day"
+    ],
+    ": 100% uptime"
+   ]
+  },
+  {
+   "text": "By accessing or using Better I18N's services, you agree to be bound by these Terms of Service. If you do not agree to these terms, <strong>do not use our services</strong>.",
+   "ir": [
+    "By accessing or using Better I18N's services, you agree to be bound by these Terms of Service. If you do not agree to these terms, ",
+    [
+     "strong",
+     7,
+     "do not use our services"
+    ],
+    "."
+   ]
+  },
+  {
+   "text": "<strong>License to Us:</strong> You grant us a license to host, process, and display your content solely to provide our services to you.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "License to Us:"
+    ],
+    " You grant us a license to host, process, and display your content solely to provide our services to you."
+   ]
+  },
+  {
+   "text": "<strong>Ownership:</strong> You retain all rights to the content you upload to our platform. We do not claim ownership of your translations or project data.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Ownership:"
+    ],
+    " You retain all rights to the content you upload to our platform. We do not claim ownership of your translations or project data."
+   ]
+  },
+  {
+   "text": "<strong>Limitation of Liability:</strong> Our liability is limited to the amount you paid us in the 12 months preceding the claim.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Limitation of Liability:"
+    ],
+    " Our liability is limited to the amount you paid us in the 12 months preceding the claim."
+   ]
+  },
+  {
+   "text": "<strong>Warranty Disclaimer:</strong> Our services are provided \"as is\" without warranties of any kind, express or implied.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Warranty Disclaimer:"
+    ],
+    " Our services are provided \"as is\" without warranties of any kind, express or implied."
+   ]
+  },
+  {
+   "text": "<strong>Entire Agreement:</strong> These terms constitute the entire agreement between you and Better I18N.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Entire Agreement:"
+    ],
+    " These terms constitute the entire agreement between you and Better I18N."
+   ]
+  },
+  {
+   "text": "<strong>Contact:</strong> For questions about these terms, contact us at <a>legal@better-i18n.com</a>.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Contact:"
+    ],
+    " For questions about these terms, contact us at ",
+    [
+     "a",
+     7,
+     "legal@better-i18n.com"
+    ],
+    "."
+   ]
+  },
+  {
+   "text": "<strong>Governing Law:</strong> These terms are governed by the laws of Delaware, USA.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Governing Law:"
+    ],
+    " These terms are governed by the laws of Delaware, USA."
+   ]
+  },
+  {
+   "text": "<strong>Billing:</strong> Subscriptions are billed in advance on a monthly or annual basis. Refunds are provided on a pro-rata basis for annual plans.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Billing:"
+    ],
+    " Subscriptions are billed in advance on a monthly or annual basis. Refunds are provided on a pro-rata basis for annual plans."
+   ]
+  },
+  {
+   "text": "<strong>Fees:</strong> You agree to pay all fees according to your selected plan. Prices are subject to change with 30 days notice.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Fees:"
+    ],
+    " You agree to pay all fees according to your selected plan. Prices are subject to change with 30 days notice."
+   ]
+  },
+  {
+   "text": "<strong>License Grant:</strong> We grant you a limited, non-exclusive, non-transferable license to use our localization platform for your business purposes.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "License Grant:"
+    ],
+    " We grant you a limited, non-exclusive, non-transferable license to use our localization platform for your business purposes."
+   ]
+  },
+  {
+   "text": "<strong>Restrictions:</strong> You may not reverse engineer, modify, or create derivative works of our platform. You may not use our services for any illegal purposes.",
+   "ir": [
+    [
+     "strong",
+     7,
+     "Restrictions:"
+    ],
+    " You may not reverse engineer, modify, or create derivative works of our platform. You may not use our services for any illegal purposes."
+   ]
+  }
+ ]
+}

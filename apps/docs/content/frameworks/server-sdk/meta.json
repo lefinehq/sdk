@@ -1,0 +1,6 @@
+{
+  "title": "Server SDK",
+  "icon": "Server",
+  "defaultOpen": false,
+  "pages": ["index", "hono", "node", "better-auth", "supabase", "trpc", "api-reference"]
+}

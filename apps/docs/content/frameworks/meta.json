@@ -1,0 +1,25 @@
+{
+  "title": "Frameworks",
+  "description": "React SDKs for Next.js, Vite, TanStack, Remix & Expo",
+  "icon": "Layers",
+  "root": true,
+  "pages": [
+    "---Introduction---",
+    "quick-start",
+    "provider",
+    "translations",
+    "locale",
+    "geo-detection",
+    "formatting",
+    "server",
+    "---Frameworks---",
+    "nextjs",
+    "tanstack-start",
+    "vite",
+    "remix",
+    "expo",
+    "ios",
+    "flutter",
+    "server-sdk"
+  ]
+}

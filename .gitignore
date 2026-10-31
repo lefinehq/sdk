@@ -1,0 +1,78 @@
+# Compiled output
+**/dist/
+**/*.tsbuildinfo
+**/src/**/*.js
+**/src/**/*.js.map
+**/src/**/*.d.ts
+**/src/**/*.d.ts.map
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# Cache
+/.cache
+.eslintcache
+
+# Testing
+/coverage
+*.lcov
+
+# Environment variables
+.env.*.local
+.env.local
+.env
+*.env
+# wrangler's local secrets file (written as a glob: the public gate keeps its name out of the public tree)
+.dev.var[s]
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+
+# Next.js
+**/.next
+**/out
+
+# macOS
+.DS_Store
+
+# Local development files
+*.local.md
+*.local.json
+*.local.jsonc
+
+.firecrawl
+
+
+.claude
+.agents
+skills-lock.json
+
+# Local docs & specs (not tracked)
+docs/superpowers/
+apps/landing/docs/
+apps/landing/SEO-AUDIT-TODOS.md
+apps/landing/SEO-REVIEW-FINDINGS.md
+
+# Build artifacts
+**/build/
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+**/.react-router/
+apps/landing/SEO_ACTION_PLAN.md
+.wrangler/
+
+# Graphify knowledge graph (generated)
+graphify-out/
+
+# OpenLogs (dev server logs for AI)
+.openlogs/
+
+# Agent scratch working files (local only)
+.scratch_ctx/
+.gstack/

@@ -1,0 +1,72 @@
+{
+  "name": "@better-i18n/admin",
+  "version": "0.2.3",
+  "description": "Server-side admin SDK for Better i18n — manage projects, keys, translations, content, and analytics programmatically",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./projects": {
+      "types": "./dist/projects/index.d.ts",
+      "default": "./dist/projects/index.js"
+    },
+    "./keys": {
+      "types": "./dist/keys/index.d.ts",
+      "default": "./dist/keys/index.js"
+    },
+    "./translations": {
+      "types": "./dist/translations/index.d.ts",
+      "default": "./dist/translations/index.js"
+    },
+    "./content": {
+      "types": "./dist/content/index.d.ts",
+      "default": "./dist/content/index.js"
+    },
+    "./analytics": {
+      "types": "./dist/analytics/index.d.ts",
+      "default": "./dist/analytics/index.js"
+    },
+    "./sync": {
+      "types": "./dist/sync/index.d.ts",
+      "default": "./dist/sync/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@better-i18n/mcp-types": "^0.17.0",
+    "@trpc/client": "^11.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "better-i18n",
+    "admin",
+    "sdk",
+    "i18n",
+    "cms",
+    "analytics"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lefinehq/sdk.git",
+    "directory": "packages/admin"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

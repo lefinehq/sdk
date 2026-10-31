@@ -1,0 +1,803 @@
+msgid ""
+msgstr ""
+"Language: tr\n"
+
+#. js-lingui-explicit-id
+msgid "k001"
+msgstr "Özellik 1 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k002"
+msgstr "Özellik 2 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k003"
+msgstr "Özellik 3 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k004"
+msgstr "Özellik 4 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k005"
+msgstr "Özellik 5 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k006"
+msgstr "Özellik 6 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k007"
+msgstr "Özellik 7 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k008"
+msgstr "Özellik 8 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k009"
+msgstr "Özellik 9 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k010"
+msgstr "Özellik 10 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k011"
+msgstr "Özellik 11 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k012"
+msgstr "Özellik 12 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k013"
+msgstr "Özellik 13 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k014"
+msgstr "Özellik 14 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k015"
+msgstr "Özellik 15 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k016"
+msgstr "Özellik 16 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k017"
+msgstr "Özellik 17 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k018"
+msgstr "Özellik 18 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k019"
+msgstr "Özellik 19 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k020"
+msgstr "Özellik 20 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k021"
+msgstr "Özellik 21 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k022"
+msgstr "Özellik 22 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k023"
+msgstr "Özellik 23 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k024"
+msgstr "Özellik 24 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k025"
+msgstr "Özellik 25 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k026"
+msgstr "Özellik 26 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k027"
+msgstr "Özellik 27 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k028"
+msgstr "Özellik 28 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k029"
+msgstr "Özellik 29 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k030"
+msgstr "Özellik 30 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k031"
+msgstr "Özellik 31 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k032"
+msgstr "Özellik 32 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k033"
+msgstr "Özellik 33 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k034"
+msgstr "Özellik 34 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k035"
+msgstr "Özellik 35 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k036"
+msgstr "Özellik 36 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k037"
+msgstr "Özellik 37 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k038"
+msgstr "Özellik 38 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k039"
+msgstr "Özellik 39 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k040"
+msgstr "Özellik 40 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k041"
+msgstr "Özellik 41 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k042"
+msgstr "Özellik 42 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k043"
+msgstr "Özellik 43 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k044"
+msgstr "Özellik 44 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k045"
+msgstr "Özellik 45 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k046"
+msgstr "Özellik 46 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k047"
+msgstr "Özellik 47 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k048"
+msgstr "Özellik 48 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k049"
+msgstr "Özellik 49 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k050"
+msgstr "Özellik 50 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k051"
+msgstr "Özellik 51 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k052"
+msgstr "Özellik 52 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k053"
+msgstr "Özellik 53 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k054"
+msgstr "Özellik 54 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k055"
+msgstr "Özellik 55 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k056"
+msgstr "Özellik 56 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k057"
+msgstr "Özellik 57 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k058"
+msgstr "Özellik 58 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k059"
+msgstr "Özellik 59 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k060"
+msgstr "Özellik 60 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k061"
+msgstr "Özellik 61 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k062"
+msgstr "Özellik 62 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k063"
+msgstr "Özellik 63 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k064"
+msgstr "Özellik 64 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k065"
+msgstr "Özellik 65 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k066"
+msgstr "Özellik 66 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k067"
+msgstr "Özellik 67 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k068"
+msgstr "Özellik 68 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k069"
+msgstr "Özellik 69 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k070"
+msgstr "Özellik 70 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k071"
+msgstr "Özellik 71 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k072"
+msgstr "Özellik 72 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k073"
+msgstr "Özellik 73 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k074"
+msgstr "Özellik 74 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k075"
+msgstr "Özellik 75 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k076"
+msgstr "Özellik 76 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k077"
+msgstr "Özellik 77 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k078"
+msgstr "Özellik 78 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k079"
+msgstr "Özellik 79 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k080"
+msgstr "Özellik 80 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k081"
+msgstr "Özellik 81 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k082"
+msgstr "Özellik 82 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k083"
+msgstr "Özellik 83 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k084"
+msgstr "Özellik 84 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k085"
+msgstr "Özellik 85 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k086"
+msgstr "Özellik 86 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k087"
+msgstr "Özellik 87 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k088"
+msgstr "Özellik 88 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k089"
+msgstr "Özellik 89 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k090"
+msgstr "Özellik 90 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k091"
+msgstr "Özellik 91 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k092"
+msgstr "Özellik 92 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k093"
+msgstr "Özellik 93 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k094"
+msgstr "Özellik 94 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k095"
+msgstr "Özellik 95 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k096"
+msgstr "Özellik 96 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k097"
+msgstr "Özellik 97 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k098"
+msgstr "Özellik 98 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k099"
+msgstr "Özellik 99 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k100"
+msgstr "Özellik 100 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k101"
+msgstr "Özellik 101 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k102"
+msgstr "Özellik 102 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k103"
+msgstr "Özellik 103 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k104"
+msgstr "Özellik 104 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k105"
+msgstr "Özellik 105 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k106"
+msgstr "Özellik 106 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k107"
+msgstr "Özellik 107 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k108"
+msgstr "Özellik 108 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k109"
+msgstr "Özellik 109 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k110"
+msgstr "Özellik 110 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k111"
+msgstr "Özellik 111 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k112"
+msgstr "Özellik 112 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k113"
+msgstr "Özellik 113 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k114"
+msgstr "Özellik 114 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k115"
+msgstr "Özellik 115 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k116"
+msgstr "Özellik 116 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k117"
+msgstr "Özellik 117 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k118"
+msgstr "Özellik 118 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k119"
+msgstr "Özellik 119 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k120"
+msgstr "Özellik 120 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k121"
+msgstr "Özellik 121 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k122"
+msgstr "Özellik 122 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k123"
+msgstr "Özellik 123 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k124"
+msgstr "Özellik 124 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k125"
+msgstr "Özellik 125 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k126"
+msgstr "Özellik 126 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k127"
+msgstr "Özellik 127 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k128"
+msgstr "Özellik 128 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k129"
+msgstr "Özellik 129 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k130"
+msgstr "Özellik 130 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k131"
+msgstr "Özellik 131 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k132"
+msgstr "Özellik 132 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k133"
+msgstr "Özellik 133 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k134"
+msgstr "Özellik 134 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k135"
+msgstr "Özellik 135 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k136"
+msgstr "Özellik 136 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k137"
+msgstr "Özellik 137 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k138"
+msgstr "Özellik 138 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k139"
+msgstr "Özellik 139 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k140"
+msgstr "Özellik 140 ekibinizi her projede uyumlu tutar"
+
+#. js-lingui-explicit-id
+msgid "k141"
+msgstr "Merhaba {name}, 141. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k142"
+msgstr "Merhaba {name}, 142. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k143"
+msgstr "Merhaba {name}, 143. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k144"
+msgstr "Merhaba {name}, 144. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k145"
+msgstr "Merhaba {name}, 145. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k146"
+msgstr "Merhaba {name}, 146. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k147"
+msgstr "Merhaba {name}, 147. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k148"
+msgstr "Merhaba {name}, 148. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k149"
+msgstr "Merhaba {name}, 149. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k150"
+msgstr "Merhaba {name}, 150. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k151"
+msgstr "Merhaba {name}, 151. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k152"
+msgstr "Merhaba {name}, 152. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k153"
+msgstr "Merhaba {name}, 153. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k154"
+msgstr "Merhaba {name}, 154. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k155"
+msgstr "Merhaba {name}, 155. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k156"
+msgstr "Merhaba {name}, 156. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k157"
+msgstr "Merhaba {name}, 157. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k158"
+msgstr "Merhaba {name}, 158. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k159"
+msgstr "Merhaba {name}, 159. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k160"
+msgstr "Merhaba {name}, 160. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k161"
+msgstr "Merhaba {name}, 161. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k162"
+msgstr "Merhaba {name}, 162. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k163"
+msgstr "Merhaba {name}, 163. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k164"
+msgstr "Merhaba {name}, 164. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k165"
+msgstr "Merhaba {name}, 165. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k166"
+msgstr "Merhaba {name}, 166. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k167"
+msgstr "Merhaba {name}, 167. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k168"
+msgstr "Merhaba {name}, 168. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k169"
+msgstr "Merhaba {name}, 169. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k170"
+msgstr "Merhaba {name}, 170. bölüme hoş geldiniz"
+
+#. js-lingui-explicit-id
+msgid "k171"
+msgstr "{count, plural, other {klasör 171 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k172"
+msgstr "{count, plural, other {klasör 172 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k173"
+msgstr "{count, plural, other {klasör 173 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k174"
+msgstr "{count, plural, other {klasör 174 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k175"
+msgstr "{count, plural, other {klasör 175 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k176"
+msgstr "{count, plural, other {klasör 176 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k177"
+msgstr "{count, plural, other {klasör 177 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k178"
+msgstr "{count, plural, other {klasör 178 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k179"
+msgstr "{count, plural, other {klasör 179 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k180"
+msgstr "{count, plural, other {klasör 180 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k181"
+msgstr "{count, plural, other {klasör 181 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k182"
+msgstr "{count, plural, other {klasör 182 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k183"
+msgstr "{count, plural, other {klasör 183 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k184"
+msgstr "{count, plural, other {klasör 184 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k185"
+msgstr "{count, plural, other {klasör 185 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k186"
+msgstr "{count, plural, other {klasör 186 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k187"
+msgstr "{count, plural, other {klasör 187 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k188"
+msgstr "{count, plural, other {klasör 188 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k189"
+msgstr "{count, plural, other {klasör 189 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k190"
+msgstr "{count, plural, other {klasör 190 içinde # dosya}}"
+
+#. js-lingui-explicit-id
+msgid "k191"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 191)"
+
+#. js-lingui-explicit-id
+msgid "k192"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 192)"
+
+#. js-lingui-explicit-id
+msgid "k193"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 193)"
+
+#. js-lingui-explicit-id
+msgid "k194"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 194)"
+
+#. js-lingui-explicit-id
+msgid "k195"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 195)"
+
+#. js-lingui-explicit-id
+msgid "k196"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 196)"
+
+#. js-lingui-explicit-id
+msgid "k197"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 197)"
+
+#. js-lingui-explicit-id
+msgid "k198"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 198)"
+
+#. js-lingui-explicit-id
+msgid "k199"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 199)"
+
+#. js-lingui-explicit-id
+msgid "k200"
+msgstr "{d, date, medium} tarihinde güncellendi (rapor 200)"

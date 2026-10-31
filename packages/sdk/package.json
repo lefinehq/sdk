@@ -1,0 +1,43 @@
+{
+  "name": "@better-i18n/sdk",
+  "version": "3.5.0",
+  "description": "Content SDK for Better i18n - headless CMS client for fetching content models and entries",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b --force",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "content",
+    "sdk",
+    "headless-cms",
+    "better-i18n",
+    "cms"
+  ],
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lefinehq/sdk.git",
+    "directory": "packages/sdk"
+  }
+}

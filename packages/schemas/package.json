@@ -1,0 +1,36 @@
+{
+  "name": "@better-i18n/schemas",
+  "version": "0.2.2",
+  "description": "Public schemas and types for Better i18n SDK and MCP",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ai-models": {
+      "types": "./dist/ai-models.d.ts",
+      "default": "./dist/ai-models.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "bun run build"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lefinehq/sdk.git",
+    "directory": "packages/schemas"
+  }
+}

@@ -1,0 +1,304 @@
+---
+title: Setup
+description: Installation and configuration for Expo and React Native
+---
+
+This guide walks you through installing `@better-i18n/expo` and setting up i18next in your Expo or React Native app.
+
+<Callout type="info">
+**Prerequisite:** Create a project at [dash.better-i18n.com](https://dash.better-i18n.com). Your project identifier will be in the format `org/project` (e.g., `my-company/mobile-app`).
+</Callout>
+
+## Installation
+
+<Tabs items={['npm', 'yarn', 'pnpm', 'bun']}>
+  <Tab value="npm">
+  ```bash
+  npm install @better-i18n/expo i18next react-i18next
+  ```
+  </Tab>
+  <Tab value="yarn">
+  ```bash
+  yarn add @better-i18n/expo i18next react-i18next
+  ```
+  </Tab>
+  <Tab value="pnpm">
+  ```bash
+  pnpm add @better-i18n/expo i18next react-i18next
+  ```
+  </Tab>
+  <Tab value="bun">
+  ```bash
+  bun add @better-i18n/expo i18next react-i18next
+  ```
+  </Tab>
+</Tabs>
+
+### Recommended Optional Dependencies
+
+For offline caching and device locale detection:
+
+```bash
+npx expo install expo-localization
+```
+
+- **expo-localization** - Enables device locale detection via `useDeviceLocale`
+
+For persistent storage, install one of:
+
+```bash
+# Fastest: MMKV (recommended)
+npx expo install react-native-mmkv
+
+# Most common: AsyncStorage
+npx expo install @react-native-async-storage/async-storage
+```
+
+<Callout type="tip">
+  **Bring your own storage.** Pass any storage instance — MMKV or AsyncStorage —
+  through `storageAdapter()`. The adapter detects the type automatically and normalizes it.
+  No storage passed? Falls back to in-memory (great for demos and testing).
+</Callout>
+
+## Configuration
+
+<Steps>
+
+<Step>
+### Create i18n Config
+
+Create a file to initialize i18next with `initBetterI18n`:
+
+<Tabs items={['Basic', 'Offline-First (Recommended)']}>
+  <Tab value="Basic">
+```ts title="lib/i18n/index.ts"
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import { initBetterI18n } from '@better-i18n/expo'; // [!code highlight]
+
+i18n.use(initReactI18next); // [!code highlight]
+
+// Start at module level — the promise is cached, so multiple imports won't re-run init
+export const i18nReady = initBetterI18n({ // [!code highlight]
+  projectId: 'your-org/your-project', // [!code highlight]
+  i18n,
+  defaultLocale: 'en',
+  debug: __DEV__,
+});
+
+export default i18n;
+```
+
+<Callout type="warn">
+  This config has **no offline support** and no locale persistence. The app always starts in `defaultLocale` — if a user previously selected Turkish, they'll see English for one frame before switching. For production apps, use the **Offline-First** tab.
+</Callout>
+  </Tab>
+  <Tab value="Offline-First (Recommended)">
+
+Pass a `storageAdapter` to enable offline caching and locale persistence. Translations are cached locally and the user's language choice survives app restarts — no "English flash".
+
+<Tabs items={['MMKV', 'AsyncStorage']}>
+  <Tab value="MMKV">
+```ts title="lib/i18n/index.ts"
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import { MMKV } from 'react-native-mmkv';
+import { initBetterI18n, storageAdapter } from '@better-i18n/expo'; // [!code highlight]
+
+const mmkv = new MMKV({ id: 'app' });
+
+i18n.use(initReactI18next);
+
+export const i18nReady = initBetterI18n({
+  projectId: 'your-org/your-project',
+  i18n,
+  storage: storageAdapter(mmkv, { localeKey: '@app:locale' }), // [!code highlight]
+  defaultLocale: 'en',
+  debug: __DEV__,
+});
+
+export default i18n;
+```
+  </Tab>
+  <Tab value="AsyncStorage">
+```ts title="lib/i18n/index.ts"
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { initBetterI18n, storageAdapter } from '@better-i18n/expo'; // [!code highlight]
+
+i18n.use(initReactI18next);
+
+export const i18nReady = initBetterI18n({
+  projectId: 'your-org/your-project',
+  i18n,
+  storage: storageAdapter(AsyncStorage, { localeKey: '@app:locale' }), // [!code highlight]
+  defaultLocale: 'en',
+  debug: __DEV__,
+});
+
+export default i18n;
+```
+  </Tab>
+</Tabs>
+
+<Callout type="info">
+  **`localeKey` nedir?** `storageAdapter`'a `localeKey` geçildiğinde, kullanıcının seçtiği dil her `changeLanguage()` çağrısında storage'a yazılır ve uygulama yeniden açıldığında otomatik okunur.
+
+  `localeKey` **olmadan**: uygulama her açılışta `defaultLocale` veya cihaz diline başlar — kullanıcı Türkçe seçmiş olsa bile, uygulamanın ilk açılışında 1 frame'lik "English flash" riski vardır.
+
+  `localeKey` **ile**: son seçilen dil her zaman kazanır — kayıtlı dil, cihaz dilinden ve `defaultLocale`'den önce gelir.
+</Callout>
+  </Tab>
+</Tabs>
+
+<Callout type="tip">
+  Need the language list? Use `getLanguages()` anywhere in your app after init completes — no context provider needed.
+</Callout>
+</Step>
+
+<Step>
+### Initialize in App Entry
+
+Await `i18nReady` before rendering your app. Use `SplashScreen` to keep the native splash visible during init — the user sees no loading indicator at all.
+
+<Tabs items={['Expo Router', 'Expo (No Router)', 'Bare React Native']}>
+  <Tab value="Expo Router">
+```tsx title="app/_layout.tsx"
+import { useEffect, useState } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+import { Stack } from 'expo-router';
+import { i18nReady } from '~/lib/i18n'; // [!code ++]
+
+// Hold the splash screen until the app is ready
+SplashScreen.preventAutoHideAsync(); // [!code ++]
+
+export default function RootLayout() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => { // [!code ++]
+    i18nReady.then(() => { // [!code ++]
+      setReady(true); // [!code ++]
+      SplashScreen.hideAsync(); // [!code ++]
+    }); // [!code ++]
+  }, []); // [!code ++]
+
+  if (!ready) return null; // [!code ++]
+
+  return <Stack />;
+}
+```
+
+<Callout type="info">
+  `SplashScreen.preventAutoHideAsync()` is called at module level so it takes effect before the first render. The native splash stays visible while `i18nReady` resolves — no spinner, no blank screen, no English flash.
+</Callout>
+  </Tab>
+  <Tab value="Expo (No Router)">
+```tsx title="App.tsx"
+import { useEffect, useState } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+import { i18nReady } from './src/i18n'; // [!code ++]
+import { HomeScreen } from './src/screens/HomeScreen';
+
+// Hold the splash screen until the app is ready
+SplashScreen.preventAutoHideAsync(); // [!code ++]
+
+export default function App() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => { // [!code ++]
+    i18nReady.then(() => { // [!code ++]
+      setReady(true); // [!code ++]
+      SplashScreen.hideAsync(); // [!code ++]
+    }); // [!code ++]
+  }, []); // [!code ++]
+
+  // SplashScreen is visible, so the user sees nothing during init
+  if (!ready) return null; // [!code ++]
+
+  return <HomeScreen />;
+}
+```
+  </Tab>
+  <Tab value="Bare React Native">
+```ts title="index.ts"
+import { registerRootComponent } from 'expo';
+import { i18nReady } from './src/i18n';
+
+// The App component is only mounted after i18n is ready — no loading state needed
+i18nReady.then(() => {
+  const { App } = require('./src/App');
+  registerRootComponent(App);
+});
+```
+  </Tab>
+</Tabs>
+</Step>
+
+<Step>
+### Use Translations
+
+Use the standard `react-i18next` hooks — no changes to your components:
+
+```tsx title="src/screens/HomeScreen.tsx"
+import { useTranslation } from 'react-i18next';
+import { Text, View } from 'react-native';
+
+export function HomeScreen() {
+  const { t } = useTranslation();
+
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ fontSize: 24 }}>{t('welcome')}</Text>
+      <Text>{t('description')}</Text>
+    </View>
+  );
+}
+```
+
+#### Language Picker Example
+
+Use `i18n.changeLanguage()` to switch languages at runtime. Translations are **pre-loaded before the switch** — no loading spinners or English flash.
+
+```tsx title="components/LanguagePicker.tsx"
+import { useTranslation } from 'react-i18next';
+import { FlatList, Pressable, Text } from 'react-native';
+import { getLanguages } from '@better-i18n/expo'; // [!code highlight]
+
+export function LanguagePicker() {
+  const { i18n } = useTranslation();
+
+  return (
+    <FlatList
+      data={getLanguages()} // [!code highlight]
+      keyExtractor={(item) => item.code}
+      renderItem={({ item }) => (
+        <Pressable onPress={() => i18n.changeLanguage(item.code)}>
+          <Text>{item.nativeName ?? item.name}</Text>
+        </Pressable>
+      )}
+    />
+  );
+}
+```
+
+<Callout type="tip">
+  Language switching is instant — `initBetterI18n` overrides `changeLanguage()` to pre-load translations from CDN (or cache) before the switch happens. No loading spinners or English flash.
+</Callout>
+</Step>
+
+</Steps>
+
+## Next Steps
+
+<Cards>
+  <Card title="Offline & Caching" icon="WifiOff" href="/frameworks/expo/offline-caching">
+    Understand the caching strategy and offline support.
+  </Card>
+  <Card title="Dynamic CFBundleLocalizations" icon="Globe" href="/frameworks/expo/dynamic-localizations">
+    Auto-sync iOS locale support with your CDN languages — no manual app.config updates.
+  </Card>
+  <Card title="API Reference" icon="FileCode" href="/frameworks/expo/api-reference">
+    Full API documentation for all exports.
+  </Card>
+</Cards>
