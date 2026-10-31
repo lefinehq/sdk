@@ -1,186 +1,80 @@
 <p align="center">
-  <a href="https://better-i18n.com">
+  <a href="https://lefine.ai">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://better-i18n.com/brand/logo-dark.svg">
-      <img src="https://better-i18n.com/brand/logo-light.svg" alt="Better i18n" width="240">
+      <source media="(prefers-color-scheme: dark)" srcset="./assets/brand/lockup-paper.svg">
+      <img src="./assets/brand/lockup-ink.svg" alt="Lefine" height="40">
     </picture>
   </a>
 </p>
 
-<h3 align="center">TypeScript SDKs for the Better i18n localization platform</h3>
+<h3 align="center">The SDKs, CLI and MCP server for Lefine</h3>
 
 <p align="center">
-  Manage translations with CDN delivery, GitHub sync, and AI-powered workflows.
+  Strings and content from the Lefine edge, for your app and your agents.
   <br />
-  <a href="https://docs.better-i18n.com"><strong>Documentation</strong></a> · <a href="https://better-i18n.com"><strong>Website</strong></a> · <a href="https://better-i18n.com/blog"><strong>Blog</strong></a>
+  <a href="https://lefine.ai/docs"><strong>Documentation</strong></a> · <a href="https://lefine.ai"><strong>Website</strong></a> · <a href="https://dash.lefine.ai"><strong>Dashboard</strong></a>
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@better-i18n/cli"><img src="https://img.shields.io/npm/v/@better-i18n/cli?label=%40better-i18n%2Fcli&color=0284c7" alt="CLI version"></a>
-  <a href="https://www.npmjs.com/package/@better-i18n/next"><img src="https://img.shields.io/npm/v/@better-i18n/next?label=%40better-i18n%2Fnext&color=0284c7" alt="Next.js SDK version"></a>
-  <a href="https://www.npmjs.com/package/@better-i18n/expo"><img src="https://img.shields.io/npm/v/@better-i18n/expo?label=%40better-i18n%2Fexpo&color=0284c7" alt="Expo SDK version"></a>
-  <a href="https://www.npmjs.com/package/@better-i18n/mcp"><img src="https://img.shields.io/npm/v/@better-i18n/mcp?label=%40better-i18n%2Fmcp&color=0284c7" alt="MCP version"></a>
-  <a href="https://github.com/better-i18n/oss/blob/main/LICENSE"><img src="https://img.shields.io/github/license/better-i18n/oss?color=0284c7" alt="MIT License"></a>
+  <a href="https://www.npmjs.com/package/lefine"><img src="https://img.shields.io/npm/v/lefine?label=lefine&color=171717" alt="lefine version"></a>
+  <a href="https://www.npmjs.com/package/@lefine/cli"><img src="https://img.shields.io/npm/v/@lefine/cli?label=%40lefine%2Fcli&color=171717" alt="CLI version"></a>
+  <a href="https://www.npmjs.com/package/@lefine/mcp"><img src="https://img.shields.io/npm/v/@lefine/mcp?label=%40lefine%2Fmcp&color=171717" alt="MCP version"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-171717" alt="MIT License"></a>
 </p>
 
 ---
 
-## Why Better i18n?
+## Quick start
 
-Most localization tools weren't built for modern developer workflows. Better i18n is different:
+```sh
+npm i lefine && npx lefine init     # signs in, picks the app, writes lefine.ts with its id
+```
 
-- **GitHub-native** — translations sync as PRs, reviews happen in your existing workflow
-- **CDN-delivered** — translations served from [Cloudflare's edge network](https://cloudflare.com), updated without redeployment
-- **AI-powered** — context-aware translation with [Google Gemini](https://deepmind.google/technologies/gemini/), not word-by-word machine output
-- **TypeScript-first** — full type safety across [Next.js](https://nextjs.org), [React](https://react.dev), [Expo](https://expo.dev), and [React Native](https://reactnative.dev)
-- **MCP-ready** — AI agents can manage translations through the [Model Context Protocol](https://modelcontextprotocol.io/)
+```tsx
+// proxy.ts
+import { lefine } from "./lefine";
+export default lefine.proxy;
+export const config = { matcher: ["/((?!api|_next|_vercel|.*\\..*).*)"] };
 
-### How it compares
+// app/[locale]/layout.tsx
+const t = await lefine.getStrings(locale, "home");
+return <lefine.Provider locale={locale} namespaces={["nav"]}>{children}</lefine.Provider>;
 
-| Feature | Better i18n | [Crowdin](https://crowdin.com) | [Lokalise](https://lokalise.com) | [Phrase](https://phrase.com) |
-|---------|:-----------:|:------:|:--------:|:------:|
-| GitHub-first workflow | ✅ | Partial | Partial | ❌ |
-| AI translation with context | ✅ | ✅ | ✅ | ✅ |
-| CDN delivery (no redeploy) | ✅ | ❌ | ❌ | ❌ |
-| TypeScript SDKs | ✅ | ❌ | ❌ | ❌ |
-| MCP server for AI agents | ✅ | ❌ | ❌ | ❌ |
-| CLI scanner (unused key detection) | ✅ | ❌ | ❌ | ❌ |
-| ICU MessageFormat support | ✅ | ✅ | ✅ | ✅ |
-| Open-source SDKs | ✅ | Partial | ❌ | ❌ |
-| Free tier | ✅ | ✅ | ❌ | ❌ |
+// a client component
+const t = useStrings("nav");        // import { useStrings } from "lefine/react"
+```
+
+The full list of imports (Next.js, TanStack Start, any React, Vue, Content) is in [`packages/lefine`](./packages/lefine).
 
 ## Packages
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [`@better-i18n/cli`](./packages/cli) | CLI for scanning, syncing, and managing translations | [![npm](https://img.shields.io/npm/v/@better-i18n/cli)](https://www.npmjs.com/package/@better-i18n/cli) |
-| [`@better-i18n/next`](./packages/next) | [Next.js](https://nextjs.org) SDK with middleware and hooks | [![npm](https://img.shields.io/npm/v/@better-i18n/next)](https://www.npmjs.com/package/@better-i18n/next) |
-| [`@better-i18n/use-intl`](./packages/use-intl) | [React](https://react.dev) hooks for [use-intl](https://www.npmjs.com/package/use-intl) integration | [![npm](https://img.shields.io/npm/v/@better-i18n/use-intl)](https://www.npmjs.com/package/@better-i18n/use-intl) |
-| [`@better-i18n/expo`](./packages/expo) | [Expo](https://expo.dev) / [React Native](https://reactnative.dev) integration with offline caching | [![npm](https://img.shields.io/npm/v/@better-i18n/expo)](https://www.npmjs.com/package/@better-i18n/expo) |
-| [`@better-i18n/core`](./packages/core) | Core utilities for locale handling and formatting | [![npm](https://img.shields.io/npm/v/@better-i18n/core)](https://www.npmjs.com/package/@better-i18n/core) |
-| [`@better-i18n/mcp`](./packages/mcp) | [MCP](https://modelcontextprotocol.io/) server for AI agent integration | [![npm](https://img.shields.io/npm/v/@better-i18n/mcp)](https://www.npmjs.com/package/@better-i18n/mcp) |
-| [`@better-i18n/schemas`](./packages/schemas) | Shared [Zod](https://zod.dev) validation schemas | [![npm](https://img.shields.io/npm/v/@better-i18n/schemas)](https://www.npmjs.com/package/@better-i18n/schemas) |
+| Package | What it does |
+|---|---|
+| [`lefine`](./packages/lefine) | Strings and content from the Lefine edge, an ICU runtime under 2 KB, no runtime dependencies |
+| [`@lefine/cli`](./packages/lefine-cli) | Sign in, then pull, push, check and publish your app strings from the terminal |
+| [`@lefine/mcp`](./packages/lefine-mcp) | Lefine as an MCP server for Claude, Cursor and other agents (same as `npx lefine mcp`) |
+| [`github-action`](./github-action) | Push source texts from CI and get translations back as a pull request, with no stored secret |
 
-## Quick Start
+## Use it with AI agents
 
-```bash
-# Install the CLI
-npm install -g @better-i18n/cli
-
-# Initialize in your project
-npx @better-i18n/cli init
-
-# Scan your codebase for translation keys
-npx @better-i18n/cli scan
-
-# Sync translations with the Better i18n platform
-npx @better-i18n/cli sync
-```
-
-## Framework Integration
-
-### Next.js
-
-```bash
-npm install @better-i18n/next
-```
-
-```typescript
-// middleware.ts
-import { createI18nMiddleware } from '@better-i18n/next';
-
-export default createI18nMiddleware({
-  locales: ['en', 'tr', 'de'],
-  defaultLocale: 'en',
-});
-```
-
-See the [Next.js integration guide](https://docs.better-i18n.com/sdk/next) for routing, server components, and metadata setup.
-
-### React with use-intl
-
-```bash
-npm install @better-i18n/use-intl
-```
-
-```tsx
-import { BetterI18nProvider, useTranslations } from '@better-i18n/use-intl';
-
-function App() {
-  return (
-    <BetterI18nProvider locale="en" messages={messages}>
-      <MyComponent />
-    </BetterI18nProvider>
-  );
-}
-
-function MyComponent() {
-  const t = useTranslations('common');
-  return <h1>{t('welcome')}</h1>;
+```json
+{
+  "mcpServers": {
+    "lefine": { "command": "npx", "args": ["-y", "lefine", "mcp"] }
+  }
 }
 ```
 
-### Expo / React Native
+Agents can translate your app, edit and publish website pages, and make localized videos. You approve anything that goes live. Setup for each client: [`packages/lefine-mcp`](./packages/lefine-mcp).
 
-```bash
-npm install @better-i18n/expo
-```
+## Examples
 
-```tsx
-import { BetterI18nExpoProvider, useTranslations } from '@better-i18n/expo';
+[`examples/`](./examples) has small apps that read their texts from Lefine: Next.js, Vite + React and Expo. CI builds each one on every pull request.
 
-export default function App() {
-  return (
-    <BetterI18nExpoProvider
-      projectId="your-project-id"
-      defaultLocale="en"
-      fallbackMessages={fallback}
-    >
-      <HomeScreen />
-    </BetterI18nExpoProvider>
-  );
-}
-```
+## Better i18n packages
 
-Supports offline caching, OTA translation updates, and automatic locale detection. See the [Expo guide](https://docs.better-i18n.com/sdk/expo).
-
-### MCP Server (AI Agents)
-
-```bash
-npm install @better-i18n/mcp
-```
-
-Connect AI assistants like [Claude](https://claude.ai), [Cursor](https://cursor.com), or [Windsurf](https://windsurf.com) to your translation workflow through the [Model Context Protocol](https://modelcontextprotocol.io/).
-
-### Agent Skill
-
-Give your AI agent permanent better-i18n knowledge — SDK setup, key naming, CDN behavior, GitHub sync, and MCP tool usage — without pasting prompts each session.
-
-```bash
-npx skills add better-i18n/skills
-```
-
-Works with Claude Code, Cursor, Windsurf, and any agent that supports custom instructions. See [github.com/better-i18n/skills](https://github.com/better-i18n/skills).
-
-## Documentation
-
-Visit [docs.better-i18n.com](https://docs.better-i18n.com) for full documentation:
-
-- [Getting Started](https://docs.better-i18n.com/getting-started) — setup and first project
-- [CLI Reference](https://docs.better-i18n.com/cli) — all commands and options
-- [SDK Guides](https://docs.better-i18n.com/sdk) — Next.js, React, Expo integrations
-- [API Reference](https://docs.better-i18n.com/api) — REST API documentation
-- [MCP Integration](https://docs.better-i18n.com/mcp) — AI agent setup
-
-## Related
-
-- [better-i18n/skills](https://github.com/better-i18n/skills) — AI agent skills for i18n best practices
-- [better-i18n/status.better-i18n.com](https://github.com/better-i18n/status.better-i18n.com) — open-source status page
-
-## Contributing
-
-Contributions are welcome! Please read our [contributing guidelines](./CONTRIBUTING.md) before submitting PRs.
+The `@better-i18n/*` packages in `packages/` are the SDKs of [Better i18n](https://better-i18n.com), a separate product. They have their own docs at [docs.better-i18n.com](https://docs.better-i18n.com).
 
 ## License
 
-[MIT](./LICENSE) — Better i18n
+[MIT](./LICENSE) — Lefine
