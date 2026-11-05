@@ -37,7 +37,7 @@ add `--header "Authorization: Bearer <key>"`.
 
 ## What the agent gets
 
-Five tools, whatever your plan:
+Up to seven tools. The agent sees only the ones the key can use:
 
 | Tool | What it does |
 |---|---|
@@ -46,6 +46,8 @@ Five tools, whatever your plan:
 | `lefine_read` | Run an action that only reads. |
 | `lefine_write` | Run an action that writes drafts. Nothing goes live. |
 | `lefine_publish` | Run an action that goes live or spends credits. It asks you first. |
+| `lefine_launch` | Take the workspace into a new market in one run, like "launch in Japanese". It drafts the work and shows one diff. Nothing goes live until you approve it in Lefine. |
+| `lefine_launch_status` | Read a launch: its steps, its diff, and whether it waits for your yes. |
 
 Every action, with what it needs: run `npx lefine actions` (add words to filter, e.g. `npx lefine actions content`).
 
