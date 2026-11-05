@@ -1,5 +1,13 @@
 # lefine
 
+## 0.8.1
+
+### Patch Changes
+
+- `t.rich` handlers are typed from the call: `t.rich("terms", { a: (chunks) => <a>{chunks}</a> })` compiles in strict mode with `useStrings` and `getStrings` (it failed with TS7006 / TS2322 before, because `chunks` was `unknown[]`). `chunks` is now `any[]`; the result type is still `string | T | Array<string | T>`, with T the element the handler returns.
+- A build with the Lefine edge down no longer dies on a raw `fetch failed`. With a snapshot (`npx lefine strings snapshot`, `snapshot: ...`) or a device copy the loader serves it and logs ONE warning; with none it throws ONE `EdgeUnreachableError` that says to run `npx lefine strings snapshot`. After a failure with a copy in hand the edge is not asked again for 30 s, so a build does not wait for a timeout per page.
+- README quick start: `generateStaticParams` and the root layout move (create-next-app's Cache Components default), and how to build without the edge.
+
 ## 0.8.0
 
 ### Minor Changes

@@ -139,4 +139,28 @@ describe("a build-time snapshot (createSnapshot, createStrings({ snapshot }))", 
     const t = await strings.getStrings("tr", "nav");
     expect(t("pricing")).toBe("Fiyatlar");
   });
+
+  it("the edge down at build time: the snapshot is served with ONE warning; with no snapshot, ONE error that says what to do", async () => {
+    const { createSnapshot } = await import("../index.js");
+    edge();
+    const snap = await createSnapshot({ project: currentApp(), cdn: "https://cdn.test" });
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError("fetch failed", { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) });
+    }) as typeof fetch;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const strings = createStrings({ project: currentApp(), cdn: "https://cdn.test", snapshot: snap });
+      for (const page of [1, 2, 3]) expect((await strings.getStrings("tr", "nav"))("pricing")).toBe("Fiyatlar");
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toMatch(/no fresh texts from the Lefine edge .*ECONNREFUSED.*last verified copy/);
+
+      const bare = createStrings({ project: currentApp(), cdn: "https://cdn.test" });
+      const err = await bare.getStrings("tr", "nav").catch((x: unknown) => x);
+      expect((err as Error).name).toBe("EdgeUnreachableError");
+      expect((err as Error).message).toMatch(/cannot get the manifest .*ECONNREFUSED.*npx lefine strings snapshot.*`snapshot`/);
+      expect((err as Error).message).not.toContain("TypeError");
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

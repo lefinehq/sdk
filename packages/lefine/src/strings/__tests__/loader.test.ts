@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { compileMessages } from "../compile.js";
-import { createStringsLoader } from "../loader.js";
+import { createStringsLoader, EdgeUnreachableError } from "../loader.js";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const V1 = "mh3k2lc0-a1b2c3d4";
@@ -344,5 +344,124 @@ describe("stale while revalidate (createStrings with a snapshot)", () => {
     vi.useRealTimers();
     await vi.waitFor(async () => expect((await loader.load("en")).texts).toEqual(JSON.parse(EN2)));
     expect(manifests(e)).toBe(2);
+  });
+});
+
+describe("the edge is away (a build with the CDN down)", () => {
+  const manifests = (e: ReturnType<typeof edge>) => e.requests.filter((r) => r.url.endsWith("/manifest.json")).length;
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+  const mem = () => {
+    const data = new Map<string, string>();
+    return { data, storage: { get: async (k: string) => data.get(k) ?? null, set: async (k: string, v: string) => void data.set(k, v) } };
+  };
+
+  it("with nothing to fall back on: ONE error that says what to do, not a raw fetch error", async () => {
+    const { e } = setup();
+    e.setDown(true);
+    const loader = createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch });
+    const err = await loader.load("en").catch((x: unknown) => x);
+    expect(err).toBeInstanceOf(EdgeUnreachableError);
+    const message = (err as Error).message;
+    expect(message).toContain("cannot get the manifest from the Lefine edge (https://cdn.test/app_web1)");
+    expect(message).toContain("offline");
+    expect(message).toContain("npx lefine strings snapshot");
+    expect(message).toContain("snapshot");
+    expect(message.split("\n")).toHaveLength(1);
+    expect(((err as Error).cause as Error).message).toBe("offline");
+  });
+
+  it("a manifest that answers 503 is the same error, with the status", async () => {
+    const down = (async () => new Response("bad gateway", { status: 503 })) as typeof fetch;
+    const loader = createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: down });
+    await expect(loader.load("en")).rejects.toThrow(/cannot get the manifest .*manifest 503.*npx lefine strings snapshot/);
+  });
+
+  it("a file that cannot be downloaded, with no earlier copy, names the language and the way out", async () => {
+    const { e } = setup();
+    const files = e.fetch;
+    const flaky = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/translations.json")) throw new Error("reset");
+      return files(input, init);
+    }) as typeof fetch;
+    const loader = createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: flaky });
+    await expect(loader.load("en")).rejects.toThrow(/cannot get en from the Lefine edge .*reset.*npx lefine strings snapshot/);
+  });
+
+  it("an integrity error keeps its own message (the edge answered; the file is wrong)", async () => {
+    const { e } = setup();
+    e.file(`/app_web1/v/${V1}/en/translations.json`, JSON.stringify({ common: { hello: "x" } }));
+    const loader = createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch, manifestTtlMs: 0 });
+    await expect(loader.load("en")).rejects.toThrow("has 1 texts, the manifest says 2");
+  });
+
+  it("with a saved copy (a snapshot): it is served, and exactly one warning says so, however many pages ask", async () => {
+    const { e } = setup();
+    const d = mem();
+    const first = createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch, storage: d.storage });
+    await first.load("en");
+    await settle();
+
+    e.setDown(true);
+    const warn = vi.fn();
+    const loader = createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch, storage: d.storage, manifestTtlMs: 0, warn });
+    for (let i = 0; i < 5; i++) expect((await loader.load("en")).texts).toEqual(JSON.parse(EN));
+    await settle();
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = warn.mock.calls[0]![0] as string;
+    expect(message).toContain("no fresh texts from the Lefine edge (https://cdn.test/app_web1): offline.");
+    expect(message).toContain("Serving the last verified copy");
+  });
+
+  it("with a saved copy, the edge is asked once, not once per page (no timeout per render)", async () => {
+    const { e } = setup();
+    const d = mem();
+    await createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch, storage: d.storage }).load("en");
+    await settle();
+    e.setDown(true);
+    const before = manifests(e);
+    const loader = createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch, storage: d.storage, manifestTtlMs: 0, warn: () => {} });
+    for (let i = 0; i < 6; i++) await loader.load("en");
+    await settle();
+    expect(manifests(e) - before).toBe(1);
+  });
+
+  it("the last copy in memory counts too: a release that cannot be downloaded warns once and keeps the old texts", async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = setup();
+      const warn = vi.fn();
+      const loader = createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch, manifestTtlMs: 0, warn });
+      await loader.load("en");
+      const EN2 = JSON.stringify({ common: { hello: "Hi {name}", bye: "Bye" } });
+      e.setManifest(manifestOf(2, { en: { version: V2, body: EN2 } }), '"m2"'); // its file is not on the edge: 404
+      const again = await loader.load("en");
+      expect(again.texts).toEqual(JSON.parse(EN));
+      expect(again.stale).toBe(true);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("when the edge is back after the retry window, the fresh texts are served and nothing more is logged", async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = setup();
+      const d = mem();
+      await createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch, storage: d.storage }).load("en");
+      await vi.advanceTimersByTimeAsync(1);
+      e.setDown(true);
+      const warn = vi.fn();
+      const loader = createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch, storage: d.storage, manifestTtlMs: 0, warn });
+      expect((await loader.load("en")).stale).toBe(true);
+      e.setDown(false);
+      await vi.advanceTimersByTimeAsync(31_000);
+      await loader.load("en");
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await loader.load("en")).stale).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

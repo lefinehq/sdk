@@ -1,6 +1,6 @@
 {
   "name": "lefine",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Lefine for your app: strings and content from the Lefine edge, an ICU runtime under 2 KB, and the lefine CLI",
   "license": "MIT",
   "type": "module",

@@ -6,8 +6,15 @@
 
 import { DATE, NUMBER, ORDINAL, PLURAL, POUND, SELECT, TAG, type Branches, type DateTimeStyle, type Message, type Node, type NumberStyle } from "./ir.js";
 
-/** A tag handler gets its formatted children and returns anything (a React element, a string). */
-export type TagHandler<T = unknown> = (chunks: Array<string | T>) => T;
+/**
+ * A tag handler gets its formatted children and returns anything (a React element, a string). The children are
+ * strings and what other handlers returned. They are typed `any[]`, not `Array<string | T>`: T is the handler's own
+ * return type, which TypeScript cannot infer while it is still typing the handler's parameter, so `chunks` came out as
+ * `unknown[]` and `<a>{chunks}</a>` failed in strict mode (DX clean-room 2026-11-05). With `any[]`, `(chunks) => <a>{chunks}</a>`
+ * compiles as the README writes it and T is the element the handler returns.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type TagHandler<T = unknown> = (chunks: any[]) => T;
 export type Value = string | number | bigint | boolean | Date | null | undefined | TagHandler;
 export type Values = Record<string, Value>;
 

@@ -165,3 +165,29 @@ describe("createLefine", () => {
     expect(() => createLefine({ project: APP, locales: ["en"], defaultLocale: "de" })).toThrow('defaultLocale "de" is not in locales');
   });
 });
+
+describe("createLefine with the edge down (next build with the CDN away)", () => {
+  it("serves the snapshot with one warning; without one, fails with the one error that says what to do", async () => {
+    const { createSnapshot } = await import("../../server/index.js");
+    edge();
+    const app = `${APP.slice(0, -2)}${String(n).padStart(2, "0")}`; // the app id edge() just served
+    const snapshot = await createSnapshot({ project: app, cdn: "https://cdn.test" });
+    store.clear();
+    globalThis.fetch = (async () => {
+      throw new TypeError("fetch failed", { cause: Object.assign(new Error("getaddrinfo ENOTFOUND cdn.test"), { code: "ENOTFOUND" }) });
+    }) as typeof fetch;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const withSnapshot = createLefine({ project: app, locales: ["en", "de"], defaultLocale: "en", cdn: "https://cdn.test", snapshot });
+      for (const locale of ["de", "en", "de"]) expect((await withSnapshot.getStrings(locale, "nav"))("pricing")).toBe(locale === "de" ? "Preise" : "Pricing");
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toContain("ENOTFOUND");
+
+      store.clear();
+      const bare = createLefine({ project: app, locales: ["en", "de"], defaultLocale: "en", cdn: "https://cdn.test" });
+      await expect(bare.getStrings("de", "nav")).rejects.toThrow(/cannot get the manifest .*ENOTFOUND.*npx lefine strings snapshot/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

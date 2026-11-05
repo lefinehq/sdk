@@ -8,6 +8,8 @@
  *    `{base}/{project}/v/{version}/{locale}/translations.json` (built here, never taken from the manifest's url).
  *  - A download must match the manifest's `sha256` (synchronous, sha256.ts) and `keyCount`, and is
  *    never `{}`. Anything else keeps the last verified copy; with none, it throws.
+ *  - The edge being away is not a stack trace: with a copy to use (a snapshot, a device copy, the last one in memory)
+ *    the loader logs ONE warning and serves it; with none it throws ONE error that says what to do (EdgeUnreachableError).
  *  - Next to it, `messages.ir.json` (written at publish) is asked for only when the manifest entry says `ir: true`,
  *    and used when its `format` is known and its `sha256` is the manifest's. Otherwise `ir` is null and the caller
  *    compiles. A listed file that cannot be used is not asked for again.
@@ -70,6 +72,8 @@ export interface LoaderConfig {
   manifestTtlMs?: number;
   /** Per request. Default 10 s. */
   timeoutMs?: number;
+  /** Where the one "edge is away, serving the saved copy" warning goes. Default `console.warn`. */
+  warn?: (message: string) => void;
   /** Keeps the last manifest and language files on the device, for a start without network (React Native). */
   storage?: StringsStorage;
   /**
@@ -102,6 +106,25 @@ export class IntegrityError extends Error {
   }
 }
 
+/** The edge could not be reached (or answered badly) and there is no verified copy to serve instead. */
+export class EdgeUnreachableError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "EdgeUnreachableError";
+  }
+}
+
+/** Why a request failed, in a few words: "ECONNREFUSED", "timed out", "answered 503", else the message. */
+function reasonOf(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  // Node's fetch: TypeError "fetch failed" with the socket error as cause (an AggregateError when both IPv4 and IPv6 failed).
+  const cause = err.cause as { code?: unknown; errors?: Array<{ code?: unknown }> } | undefined;
+  const code = cause?.code ?? cause?.errors?.[0]?.code ?? (err as { code?: unknown }).code;
+  if (err.name === "TimeoutError" || err.name === "AbortError") return "timed out";
+  const message = err.message.replace(/^lefine:\s*/, "");
+  return typeof code === "string" ? `${message}, ${code}` : message;
+}
+
 export interface StringsLoader {
   manifest(): Promise<Manifest>;
   /** Locale codes as the CDN spells them (lowercase). */
@@ -132,6 +155,20 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
   const swr = config.staleWhileRevalidate === true;
   const timeout = config.timeoutMs ?? 10_000;
   const share = config.shareInFlight !== false;
+  const warn = config.warn ?? ((message: string) => console.warn(message));
+  let warned = false;
+  /** One warning per loader, not one per render: a build asks for every page. */
+  const warnOnce = (why: string) => {
+    if (warned) return;
+    warned = true;
+    warn(`lefine: no fresh texts from the Lefine edge (${base}): ${why}. Serving the last verified copy (the snapshot, or the texts the app saved) instead. This output may be older than what is published.`);
+  };
+  const unreachable = (what: string, err: unknown) =>
+    new EdgeUnreachableError(
+      `lefine: cannot get ${what} from the Lefine edge (${base}): ${reasonOf(err)}. There is no snapshot or saved copy to use instead. ` +
+        "Check the network, `project` and `cdn`, then build again; or run `npx lefine strings snapshot` while the edge is up and pass the file as `snapshot` to createLefine / createStrings, so a build does not need the edge.",
+      { cause: err },
+    );
 
   let current: { manifest: Manifest; etag: string | null; at: number } | null = null;
   let pending: Promise<Manifest> | null = null;
@@ -168,6 +205,8 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
   const restored = new Set<string>();
   /** The last manifest call did not reach the edge: what we have is not confirmed live. */
   let failedManifest = false;
+  /** When the last manifest call failed with a copy to fall back on: the edge is not asked again for RETRY_MS. */
+  let manifestFailedAt = -Infinity;
 
   async function fetchManifest(): Promise<Manifest> {
     try {
@@ -186,6 +225,7 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
         return current.manifest;
       }
       current = { manifest, etag: res.headers.get("etag"), at: clock() };
+      manifestFailedAt = -Infinity;
       save("manifest", { manifest, etag: current.etag });
       return manifest;
     } catch (err) {
@@ -194,14 +234,19 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
       if (await restoreManifest()) {
         // Asked again after the TTL, not on every call while the edge (or the network) is away.
         current = { ...current!, at: clock() };
+        manifestFailedAt = clock();
+        warnOnce(reasonOf(err));
         return current.manifest;
       }
-      throw err;
+      throw unreachable("the manifest", err);
     }
   }
 
   function manifest(): Promise<Manifest> {
     if (current && clock() - current.at < ttl) return Promise.resolve(current.manifest);
+    // The edge just failed and we have a copy: serve it without waiting for another timeout on every call (a build asks
+    // once per page).
+    if (current && clock() - manifestFailedAt < RETRY_MS) return Promise.resolve(current.manifest);
     if (!share) return fetchManifest();
     pending ??= fetchManifest().finally(() => {
       pending = null;
@@ -313,8 +358,13 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
         // A download that fails or does not match keeps the last verified copy (the edge keeps old versions).
         .catch((err) => {
           failedAt.set(stamp + locale, clock());
-          if (last) return { ...last, stale: true };
-          throw err;
+          if (last) {
+            warnOnce(reasonOf(err));
+            return { ...last, stale: true };
+          }
+          // An integrity error is its own message (the edge answered with a file that does not match); only a failed
+          // request is "unreachable".
+          throw err instanceof IntegrityError ? err : unreachable(`${locale}`, err);
         })
         .finally(() => inFlight.delete(stamp + locale));
       if (share) inFlight.set(stamp + locale, job);

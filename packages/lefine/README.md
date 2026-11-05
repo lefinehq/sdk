@@ -12,13 +12,38 @@ import { lefine } from "./lefine";
 export default lefine.proxy;
 export const config = { matcher: ["/((?!api|_next|_vercel|.*\\..*).*)"] };
 
-// app/[locale]/layout.tsx
-const t = await lefine.getStrings(locale, "home");
-return <lefine.Provider locale={locale} namespaces={["nav"]}>{children}</lefine.Provider>;
+// app/[locale]/layout.tsx  <- this is the ROOT layout: move <html> and <body> here and delete app/layout.tsx
+// and app/page.tsx (`npx lefine init` does the move for a fresh create-next-app).
+import { notFound } from "next/navigation";
+import { lefine } from "../../lefine";
+
+// Required with Cache Components (create-next-app's default): without it `next build` stops with
+// "A required root parameter (locale) was not provided in generateStaticParams for /[locale]".
+export const generateStaticParams = () => lefine.locales.map((locale) => ({ locale }));
+
+export default async function LocaleLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  if (!lefine.locales.includes(locale)) notFound();
+  return (
+    <html lang={locale}>
+      <body>
+        <lefine.Provider locale={locale} namespaces={["nav"]}>{children}</lefine.Provider>
+      </body>
+    </html>
+  );
+}
+
+// app/[locale]/page.tsx
+const t = await lefine.getStrings(locale, "home");     // t("title"); t.rich("terms", { a: (chunks) => <a href="/terms">{chunks}</a> })
 
 // a client component
 const t = useStrings("nav");             // import { useStrings } from "lefine/react"; Link from "lefine/next/link"
 ```
+
+`next build` needs the edge (`cdn.lefine.ai`) for the texts. To build when it is away, run `npx lefine strings snapshot`
+first and pass the file: `createLefine({ ..., snapshot })` (`import snapshot from "./lefine-snapshot.json"`). With a
+snapshot, an edge that is down logs one warning and the build uses the snapshot; without one, the build stops with one
+error that says so.
 
 | Import | What | Size (gzip) |
 |---|---|---|
