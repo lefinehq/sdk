@@ -4,9 +4,9 @@ import { compileMessages } from "../strings/compile.js";
 import { devOnError } from "../strings/dev.js";
 import type { FormatError, Formats } from "../strings/format.js";
 import type { MessageTree } from "../strings/ir.js";
-import { createStringsLoader, DEFAULT_CDN_URL, type StringsStorage } from "../strings/loader.js";
+import { createStringsLoader, DEFAULT_CDN_URL, type AppStateLike, type StringsStorage, type StringsUpdate } from "../strings/loader.js";
 
-export type { StringsStorage };
+export type { AppStateLike, StringsStorage, StringsUpdate };
 import { createTranslator } from "../strings/translator.js";
 // Types through lefine/strings, so its declaration file is in every app that uses this entry: the app's
 // `declare module "lefine/strings"` (lefine strings types) then applies to getStrings and useStrings too.
@@ -34,6 +34,14 @@ export interface ServerConfig {
    * what the edge has. Without it, that first request waits for the edge (two round trips).
    */
   snapshot?: StringsSnapshot;
+  /**
+   * React Native: `{ appState: AppState }` (from "react-native") checks the edge when the app returns to the
+   * foreground, at most every `minIntervalMs` (default 15 min), and fetches new releases of the loaded languages.
+   * Pair it with `onUpdate` to re-render; `dispose()` stops it.
+   */
+  revalidateOnForeground?: { appState: AppStateLike; minIntervalMs?: number };
+  /** A new release replaced a language's texts: call `load` again and set the new props. */
+  onUpdate?: (update: StringsUpdate) => void;
 }
 
 /** What `npx lefine strings snapshot` writes: the manifest and each language's verified file, by storage key. */
@@ -79,7 +87,15 @@ type Wrap = <T extends Translator<any, any>>(t: T) => T;
 export function createCore(config: ServerConfig, options: { fetch?: typeof fetch; manifestTtlMs?: number; staleWhileRevalidate?: boolean; shareInFlight?: boolean; wrap?: Wrap } = {}) {
   const { wrap = (t) => t, ...loaderOptions } = options;
   const storage = config.storage ?? (config.snapshot ? snapshotStorage(config.snapshot) : undefined);
-  const loader = createStringsLoader({ project: config.project, cdnBaseUrl: config.cdn ?? DEFAULT_CDN_URL, storage, ...loaderOptions, fetch: options.fetch });
+  const loader = createStringsLoader({
+    project: config.project,
+    cdnBaseUrl: config.cdn ?? DEFAULT_CDN_URL,
+    storage,
+    revalidateOnForeground: config.revalidateOnForeground,
+    onUpdate: config.onUpdate,
+    ...loaderOptions,
+    fetch: options.fetch,
+  });
   const timeZone = config.timeZone ?? "UTC";
   try {
     new Intl.DateTimeFormat("en", { timeZone });
@@ -103,6 +119,10 @@ export function createCore(config: ServerConfig, options: { fetch?: typeof fetch
   return {
     timeZone,
     messages,
+    /** Check the edge now for the loaded languages (what the foreground listener runs). */
+    revalidate: loader.revalidate,
+    /** Stop the foreground listener. */
+    dispose: loader.dispose,
 
     /** `const t = await strings.getStrings(locale, "home")`; `t("title")`, `t.rich("terms", { a })`. */
     async getStrings<N extends Namespace | undefined = undefined>(locale: string, namespace?: N): Promise<Translator<KeyOf<N>, N>> {
@@ -163,6 +183,6 @@ export interface Language {
  */
 export function createStrings(config: ServerConfig) {
   // With a snapshot, a render never waits for the edge: what is kept is served and refreshed in the background.
-  const { getStrings, load, texts, languages } = createCore(config, { manifestTtlMs: 60_000, staleWhileRevalidate: config.snapshot !== undefined });
-  return { getStrings, load, texts, languages };
+  const { getStrings, load, texts, languages, revalidate, dispose } = createCore(config, { manifestTtlMs: 60_000, staleWhileRevalidate: config.snapshot !== undefined });
+  return { getStrings, load, texts, languages, revalidate, dispose };
 }

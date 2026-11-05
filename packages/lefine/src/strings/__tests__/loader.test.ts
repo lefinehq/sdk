@@ -465,3 +465,142 @@ describe("the edge is away (a build with the CDN down)", () => {
     }
   });
 });
+
+/** A fake React Native AppState: `emit("active")` is the app coming to the foreground. */
+function fakeAppState() {
+  const listeners = new Set<(state: string) => void>();
+  return {
+    appState: {
+      addEventListener: (_type: "change", listener: (state: string) => void) => {
+        listeners.add(listener);
+        return { remove: () => void listeners.delete(listener) };
+      },
+    },
+    emit: (state: string) => listeners.forEach((l) => l(state)),
+    count: () => listeners.size,
+  };
+}
+
+describe("foreground revalidate, onUpdate and dispose", () => {
+  const publishV2 = (e: ReturnType<typeof edge>) => {
+    const EN2 = JSON.stringify({ common: { hello: "Hi {name}", bye: "Bye" } });
+    e.file(`/app_web1/v/${V2}/en/translations.json`, EN2);
+    e.setManifest(manifestOf(2, { en: { version: V2, body: EN2 }, de: { version: V1, body: DE } }), '"m2"');
+  };
+  const make = (e: ReturnType<typeof edge>, extra: object) =>
+    createStringsLoader({ project: "app_web1", cdnBaseUrl: "https://cdn.test", fetch: e.fetch, manifestTtlMs: 3_600_000, ...extra });
+
+  it("fetches a new release on foreground and tells onUpdate once", async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = setup();
+      const app = fakeAppState();
+      const onUpdate = vi.fn();
+      const loader = make(e, { revalidateOnForeground: { appState: app.appState, minIntervalMs: 1000 }, onUpdate });
+      expect((await loader.load("en")).texts).toEqual(JSON.parse(EN));
+      publishV2(e);
+      // The manifest TTL is an hour: only the foreground check can see the release.
+      expect((await loader.load("en")).texts).toEqual(JSON.parse(EN));
+      await vi.advanceTimersByTimeAsync(2000);
+      app.emit("active");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(onUpdate).toHaveBeenCalledTimes(1);
+      expect(onUpdate).toHaveBeenCalledWith({ locale: "en", stamp: expect.stringContaining(V2) });
+      expect((await loader.load("en")).texts).toEqual({ common: { hello: "Hi {name}", bye: "Bye" } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores background states and checks at most once per minIntervalMs", async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = setup();
+      const app = fakeAppState();
+      const loader = make(e, { revalidateOnForeground: { appState: app.appState, minIntervalMs: 60_000 } });
+      await loader.load("en");
+      const before = e.requests.length;
+      await vi.advanceTimersByTimeAsync(61_000);
+      app.emit("background");
+      app.emit("inactive");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(e.requests.length).toBe(before);
+      app.emit("active");
+      await vi.advanceTimersByTimeAsync(1);
+      const after = e.requests.length;
+      expect(after).toBeGreaterThan(before);
+      app.emit("active"); // too soon
+      await vi.advanceTimersByTimeAsync(1);
+      expect(e.requests.length).toBe(after);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("an unchanged manifest (304) downloads nothing and does not call onUpdate", async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = setup();
+      const app = fakeAppState();
+      const onUpdate = vi.fn();
+      const loader = make(e, { revalidateOnForeground: { appState: app.appState, minIntervalMs: 0 }, onUpdate });
+      await loader.load("en");
+      await vi.advanceTimersByTimeAsync(1);
+      const files = () => e.requests.filter((r) => r.url.includes("/v/")).length;
+      const before = files();
+      app.emit("active");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(files()).toBe(before);
+      expect(onUpdate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("offline on foreground keeps the copy and does not throw", async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = setup();
+      const app = fakeAppState();
+      const loader = make(e, { revalidateOnForeground: { appState: app.appState, minIntervalMs: 0 }, warn: () => {} });
+      await loader.load("en");
+      e.setDown(true);
+      app.emit("active");
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await loader.load("en")).texts).toEqual(JSON.parse(EN));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("dispose removes the listener: a later foreground does nothing", async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = setup();
+      const app = fakeAppState();
+      const onUpdate = vi.fn();
+      const loader = make(e, { revalidateOnForeground: { appState: app.appState, minIntervalMs: 0 }, onUpdate });
+      await loader.load("en");
+      expect(app.count()).toBe(1);
+      loader.dispose();
+      expect(app.count()).toBe(0);
+      publishV2(e);
+      const before = e.requests.length;
+      app.emit("active");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(e.requests.length).toBe(before);
+      expect(onUpdate).not.toHaveBeenCalled();
+      loader.dispose(); // twice is fine
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("an onUpdate that throws does not break the load", async () => {
+    const { e } = setup();
+    const loader = make(e, { manifestTtlMs: 0, onUpdate: () => { throw new Error("boom"); } });
+    await loader.load("en");
+    publishV2(e);
+    expect((await loader.load("en")).texts).toEqual({ common: { hello: "Hi {name}", bye: "Bye" } });
+  });
+});

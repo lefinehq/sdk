@@ -63,6 +63,18 @@ export interface LoadedLocale {
   stale: boolean;
 }
 
+/** The slice of React Native's `AppState` that foreground revalidation uses (same shape as @better-i18n/expo). */
+export interface AppStateLike {
+  addEventListener(type: "change", listener: (state: string) => void): { remove(): void } | void;
+}
+
+/** A newer verified release replaced the copy in memory. The new texts are what the next `load` returns. */
+export interface StringsUpdate {
+  locale: string;
+  /** `version:sha256` of the new file. */
+  stamp: string;
+}
+
 export interface LoaderConfig {
   /** The app's id, `app_...` (Lefine: Settings, App, App id; or `npx lefine init` writes it). */
   project: string;
@@ -87,6 +99,17 @@ export interface LoaderConfig {
    * (the layout's Provider, the page's getStrings) started counts as uncached data, so `next build` stops.
    */
   shareInFlight?: boolean;
+  /**
+   * React Native: when the app comes back to the foreground, ask the edge for the manifest (past the TTL or not) and
+   * download the new files of every language already loaded. Pass the app's `AppState`; nothing is imported here.
+   * At most one check per `minIntervalMs` (default 15 min). Call `dispose()` to stop listening.
+   */
+  revalidateOnForeground?: { appState: AppStateLike; minIntervalMs?: number };
+  /**
+   * Called after a verified download replaced a language's copy (a new release, or the saved copy refreshed). The
+   * texts are already in the loader; call `load` again and re-render. A throw in it is ignored.
+   */
+  onUpdate?: (update: StringsUpdate) => void;
 }
 
 /**
@@ -130,6 +153,10 @@ export interface StringsLoader {
   /** Locale codes as the CDN spells them (lowercase). */
   locales(): Promise<string[]>;
   load(locale: string): Promise<LoadedLocale>;
+  /** Ask the edge now for the manifest and fetch what changed for every language loaded so far. Never throws. */
+  revalidate(): Promise<void>;
+  /** Stop the foreground listener. The loader keeps working; later calls do nothing. */
+  dispose(): void;
 }
 
 
@@ -352,6 +379,7 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
       job = fetchLocale(locale, entry)
         .then((fresh) => {
           verified.set(locale, fresh);
+          if (last && last.stamp !== fresh.stamp) notifyUpdate({ locale, stamp: fresh.stamp });
           save(locale, { stamp: fresh.stamp, texts: fresh.texts, ir: fresh.ir });
           return fresh;
         })
@@ -372,7 +400,43 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
     return job;
   }
 
+  function notifyUpdate(update: StringsUpdate) {
+    try {
+      config.onUpdate?.(update); // a throw in the app's callback must not break a load
+    } catch {}
+  }
+
+  async function revalidate(): Promise<void> {
+    try {
+      // Past the TTL on purpose: a foreground check asks the edge (a 304 when nothing changed).
+      pending ??= fetchManifest().finally(() => {
+        pending = null;
+      });
+      await pending;
+      await Promise.all([...verified.keys()].map((locale) => load(locale).catch(() => {})));
+    } catch {
+      // offline: the copy in memory stays
+    }
+  }
+
+  let subscription: { remove(): void } | void;
+  const foreground = config.revalidateOnForeground;
+  if (foreground) {
+    const minIntervalMs = foreground.minIntervalMs ?? 15 * 60 * 1000;
+    let lastCheck = clock();
+    subscription = foreground.appState.addEventListener("change", (state) => {
+      const now = clock();
+      if (state !== "active" || now - lastCheck < minIntervalMs) return;
+      lastCheck = now;
+      void revalidate();
+    });
+  }
+
   return {
+    revalidate,
+    dispose() {
+      subscription?.remove();
+    },
     manifest,
     async locales() {
       return (await manifest()).languages.map((l) => cdnLocale(l.code));

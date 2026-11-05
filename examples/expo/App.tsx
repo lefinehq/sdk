@@ -3,7 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { StringsProvider, useStrings } from "lefine/react";
 import { createStrings, type StringsProps } from "lefine/server"; // "server" = runs anywhere: no Node or React inside
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Button, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Button, StyleSheet, Text, View } from "react-native";
 
 const project = process.env.EXPO_PUBLIC_LEFINE_APP;
 if (!project) throw new Error("Set EXPO_PUBLIC_LEFINE_APP to your app's id (app_...): see README.md.");
@@ -11,9 +11,14 @@ const locales = (process.env.EXPO_PUBLIC_LEFINE_LOCALES ?? "en,de").split(",");
 
 // One per app. `storage` keeps the last manifest and language files on the device, so a cold start shows texts at
 // once, even offline, and refreshes in the background. (MMKV: { get: async (k) => mmkv.getString(k) ?? null, set: async (k, v) => mmkv.set(k, v) }.)
+// `revalidateOnForeground` asks the edge when the app comes back to the foreground (at most every 15 min) and fetches a
+// new release; `onUpdate` fires once it is in, and the app loads again. `strings.dispose()` stops the listener.
+let onRelease = () => {};
 const strings = createStrings({
   project,
   storage: { get: (k) => AsyncStorage.getItem(k), set: (k, v) => AsyncStorage.setItem(k, v) },
+  revalidateOnForeground: { appState: AppState },
+  onUpdate: () => onRelease(),
   // Only for another edge (the local dev stack); unset means https://cdn.lefine.ai.
   ...(process.env.EXPO_PUBLIC_LEFINE_CDN ? { cdn: process.env.EXPO_PUBLIC_LEFINE_CDN } : {}),
 });
@@ -22,7 +27,12 @@ export default function App() {
   const [locale, setLocale] = useState(locales[0]!);
   const [props, setProps] = useState<StringsProps | null>(null);
   useEffect(() => {
-    void strings.load(locale, ["example"]).then(setProps);
+    const reload = () => void strings.load(locale, ["example"]).then(setProps);
+    onRelease = reload;
+    reload();
+    return () => {
+      onRelease = () => {};
+    };
   }, [locale]);
   if (!props) return <ActivityIndicator style={styles.page} />;
   return (
