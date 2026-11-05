@@ -11,10 +11,12 @@ import { dirname, resolve } from "node:path";
 import { select } from "@inquirer/prompts";
 import { bold, dim, green } from "../utils/colors.js";
 import { fail, loginCommand, out, type GlobalOptions } from "./auth-commands.js";
-import { createOpClient } from "./client.js";
+import { callWithApproval, createOpClient } from "./client.js";
 import { DEFAULT_CDN_URL, resolveLefineAuth } from "./credentials.js";
 import { describeApp, detectFramework, installCommand, LOCALE, packageDeps, pickSample, planInit, renderNextLefine, type SampleText } from "./init-scaffold.js";
 import { safeText } from "./safe-text.js";
+import { waitFor, type Approvals } from "./strings-manage.js";
+import { canonicalLocale } from "./strings-commands.js";
 import { itemsOf, type AppSummary } from "./types.js";
 
 export interface InitOptions extends GlobalOptions {
@@ -26,6 +28,12 @@ export interface InitOptions extends GlobalOptions {
   force?: boolean;
   /** Commander's --no-install: do not add `lefine` to the app. */
   install?: boolean;
+  /** Create a Strings app with this name instead of picking one (strings.apps.create; a person approves it in Lefine). */
+  create?: string;
+  /** The new app's source language, with --create (default en). */
+  sourceLocale?: string;
+  /** The new app's target languages, comma separated, with --create. */
+  languages?: string;
 }
 
 /** lefine.ts for one Next app. Pure. Refuses an id that is not Lefine's shape: it goes into code. */
@@ -52,7 +60,27 @@ async function liveSample(cdn: string, app: AppSummary): Promise<SampleText | nu
   }
 }
 
-export async function initCommand(options: InitOptions, pick: PickApp = ask, install: RunInstall = runInstall): Promise<void> {
+const FRAMEWORK_NAME = { next: "Next.js", "tanstack-start": "TanStack Start", react: "React" } as const;
+
+/** strings.apps.create for `init --create`: the input is built here, the owner/admin check and the plan limit stay on the server. */
+async function createApp(ops: ReturnType<typeof createOpClient>, options: InitOptions, framework: keyof typeof FRAMEWORK_NAME, deps: Approvals): Promise<AppSummary> {
+  const name = (options.create ?? "").trim();
+  if (!name) throw new Error("--create needs a name, e.g. lefine init --create \"Acme web\".");
+  if (options.app) throw new Error("Use --create or --app, not both: --create makes a new app, --app picks an existing one.");
+  const sourceLocale = canonicalLocale(options.sourceLocale || "en");
+  const targetLocales = (options.languages ?? "")
+    .split(",")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map(canonicalLocale)
+    .filter((l, i, all) => l !== sourceLocale && all.indexOf(l) === i);
+  const input = { name, platform: "web", framework: FRAMEWORK_NAME[framework], product: name, sourceLocale, targetLocales };
+  const created = await callWithApproval<AppSummary>(ops, "strings.apps.create", input, waitFor("A new app counts against the plan's project limit", options.json, deps));
+  // The server answers with the app as stored; the list shape (keyCount) is filled for the scaffold.
+  return { ...created, keyCount: created.keyCount ?? 0, targetLocales: created.targetLocales ?? targetLocales };
+}
+
+export async function initCommand(options: InitOptions, pick: PickApp = ask, install: RunInstall = runInstall, deps: Approvals = {}): Promise<void> {
   try {
     const dir = resolve(options.dir || process.cwd());
     const framework = detectFramework(dir);
@@ -63,11 +91,16 @@ export async function initCommand(options: InitOptions, pick: PickApp = ask, ins
       auth = resolveLefineAuth(options);
       if (!auth) throw new Error("Not signed in. Run `lefine login`, then `lefine init` again.");
     }
-    const apps = itemsOf<AppSummary>(await createOpClient(auth.apiUrl, auth.token).callOp("strings.apps.list", {}));
-    if (apps.length === 0) throw new Error("This workspace has no app yet. Create one in Lefine, then run `lefine init` again.");
-
+    const ops = createOpClient(auth.apiUrl, auth.token);
     let app: AppSummary | undefined;
-    if (options.app) {
+    const apps = options.create !== undefined ? [] : itemsOf<AppSummary>(await ops.callOp("strings.apps.list", {}));
+    if (options.create !== undefined) {
+      // Before the app exists: a lefine.ts in the way must not leave a new app behind.
+      const existing = [options.output, "lefine.ts", "src/lefine.ts"].filter((f): f is string => !!f).find((f) => existsSync(resolve(dir, f)));
+      if (existing && !options.force) throw new Error(`${resolve(dir, existing)} exists. Run again with --force, or without --create to use the app it names.`);
+      app = await createApp(ops, options, framework, deps);
+    } else if (apps.length === 0) throw new Error("This workspace has no app yet. Run `lefine init --create \"<name>\"` to make one, or create it in Lefine.");
+    else if (options.app) {
       app = apps.find((a) => a.id === options.app || a.slug === options.app);
       if (!app) throw new Error(`No app "${safeText(options.app)}" here. Apps: ${apps.map((a) => safeText(a.slug)).join(", ")}.`);
     } else if (apps.length === 1) app = apps[0];

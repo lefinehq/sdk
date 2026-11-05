@@ -370,3 +370,86 @@ describe("pickSample", () => {
     expect(pickSample(null)).toBeNull();
   });
 });
+
+describe("lefine init --create (gap rank 5a: strings.apps.create)", () => {
+  const realFetch = globalThis.fetch;
+  const realExit = process.exit;
+  const realLog = console.log;
+  const realErr = console.error;
+  const APPROVAL = { id: "apr_c1", url: "https://dash.lefine.ai/approvals/apr_c1", expiresAt: "2026-11-06T10:30:00.000Z" };
+  const NEW = { id: "app_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", slug: "acme-web", name: "Acme web", sourceLocale: "en", targetLocales: ["de", "pt-BR"], keyCount: 0 };
+  let dir: string;
+  let logs: string[];
+  let calls: Array<{ name: string; input: any; approval?: string }>;
+  let approvalAnswers: string[];
+  const fast = { sleep: async () => {}, openBrowser: () => {} };
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "lefine-init-create-"));
+    process.env.LEFINE_HOME = join(dir, "home");
+    process.env.LEFINE_TOKEN = "lfn_test_token_value";
+    process.env.LEFINE_API_URL = "http://api.test";
+    logs = [];
+    calls = [];
+    approvalAnswers = ["approved"];
+    console.log = (...a: unknown[]) => void logs.push(a.join(" "));
+    console.error = (...a: unknown[]) => void logs.push(a.join(" "));
+    process.exit = ((code?: number) => {
+      throw new Error(`exit:${code ?? 0}`);
+    }) as typeof process.exit;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/v1/approvals/")) return Response.json({ ok: true, data: { status: approvalAnswers.shift() ?? "pending" } });
+      if (url.includes("/v1/ops/")) {
+        const name = url.split("/v1/ops/")[1]!;
+        const body = JSON.parse(String(init?.body));
+        calls.push({ name, input: body.input, ...(body.approval ? { approval: body.approval } : {}) });
+        if (name === "strings.apps.create") {
+          if (body.approval !== APPROVAL.id) return Response.json({ ok: false, error: { code: "APPROVAL_REQUIRED", message: "ask" }, approval: APPROVAL }, { status: 428 });
+          return Response.json({ ok: true, data: NEW });
+        }
+        return Response.json({ ok: true, data: { items: [] } });
+      }
+      return new Response("{}", { status: 404 }); // the CDN: nothing live for a new app
+    }) as typeof fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    process.exit = realExit;
+    console.log = realLog;
+    console.error = realErr;
+    delete process.env.LEFINE_HOME;
+    delete process.env.LEFINE_TOKEN;
+    delete process.env.LEFINE_API_URL;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("creates the app after a person approves it, then writes lefine.ts with the new id", async () => {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { next: "16.4.3" } }));
+    await initCommand({ dir, install: false, create: "Acme web", languages: "de, pt_br, en, de" }, undefined, undefined, fast);
+    const creates = calls.filter((c) => c.name === "strings.apps.create");
+    expect(creates).toHaveLength(2); // the ask, then the approved call
+    expect(creates[0]!.input).toEqual({ name: "Acme web", platform: "web", framework: "Next.js", product: "Acme web", sourceLocale: "en", targetLocales: ["de", "pt-BR"] });
+    expect(creates[1]!.approval).toBe("apr_c1");
+    expect(calls.some((c) => c.name === "strings.apps.list")).toBe(false);
+    expect(readFileSync(join(dir, "lefine.ts"), "utf-8")).toContain(`project: "${NEW.id}", // Acme web`);
+    expect(logs.join("\n")).toContain("approves it in Lefine");
+  });
+
+  it("declined: no file is written; --app together with --create is refused before any call", async () => {
+    approvalAnswers = ["declined"];
+    await expect(initCommand({ dir, install: false, create: "Acme web" }, undefined, undefined, fast)).rejects.toThrow("exit:1");
+    expect(existsSync(join(dir, "lefine.ts"))).toBe(false);
+    calls.length = 0;
+    await expect(initCommand({ dir, install: false, create: "X", app: "web" }, undefined, undefined, fast)).rejects.toThrow("exit:1");
+    expect(logs.join("\n")).toContain("Use --create or --app, not both");
+    expect(calls).toEqual([]);
+  });
+
+  it("a lefine.ts already there stops it before an app is created", async () => {
+    writeFileSync(join(dir, "lefine.ts"), "mine");
+    await expect(initCommand({ dir, install: false, create: "Acme web" }, undefined, undefined, fast)).rejects.toThrow("exit:1");
+    expect(calls).toEqual([]);
+    expect(readFileSync(join(dir, "lefine.ts"), "utf-8")).toBe("mine");
+  });
+});

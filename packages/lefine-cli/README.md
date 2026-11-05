@@ -39,6 +39,7 @@ lefine init
 Signs you in if needed, asks which app this folder is, installs `lefine`, and writes `lefine.ts` plus a first translated page. It works for Next.js and TanStack Start. After this, every command below finds the app from `lefine.ts`, so you do not pass `-p`.
 
 - `--app <id|slug>` picks the app without the question (CI).
+- `--create <name>` makes a new Strings app first (`--source-locale`, default `en`; `--languages de,pt-BR`) and writes `lefine.ts` for it. Creating counts against the plan, so a person approves it in Lefine; the CLI prints the link and waits. It never replaces an existing `lefine.ts`, and it makes a Strings app only: a Content project is made in Lefine or with the server's `content.projects.create`.
 - `-d <path>` is the app's folder, `-o <path>` is where `lefine.ts` goes.
 - `--force` replaces an existing `lefine.ts` (never your pages). `--no-install` leaves `package.json` alone.
 
