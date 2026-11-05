@@ -65,7 +65,8 @@ Logs go to stderr; stdout carries only MCP messages.
 
 `npx lefine mcp` (and this alias) add two tools next to the server's, answered on your machine:
 
-- `lefine_find_similar_key`: keys whose name or source text is like the one you want, closest first. Agents call it first.
+- `lefine_find_similar_key`: keys whose name or source text is like the one you want, closest first, each with its `keyId`. Agents call it first.
 - `lefine_add_key`: adds one key with its source text, and refuses with the reason when the key exists in any namespace,
   the same text already has a key, the namespace does not exist (`newNamespace: true` to make one), or the text is not
-  valid ICU. A new key is not live until someone publishes.
+  valid ICU. When the key exists, the answer points at the server's `strings.keys.update` (change its text or description)
+  and `strings.translations.set` (one translation); both ask a person first. A new key is not live until someone publishes.

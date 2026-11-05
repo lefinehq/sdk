@@ -4,7 +4,7 @@ import { similarity } from "../mcp-tools.js";
 
 const APP = "app_0123456789abcdef0123456789abcdef";
 const KEYS = [
-  { namespace: "checkout", key: "coupon_applied", translations: { en: { text: "Coupon applied" } } },
+  { id: "key_cpn", namespace: "checkout", key: "coupon_applied", translations: { en: { text: "Coupon applied" } } },
   { namespace: "checkout", key: "total", translations: { en: { text: "Total: {amount, number}" } } },
   { namespace: "nav", key: "home", translations: { en: { text: "Home" } } },
 ];
@@ -60,13 +60,15 @@ describe("lefine mcp: find_similar_key and add_key (audit, idea C)", () => {
   it("find_similar_key finds the same text with other words around it, closest first", async () => {
     const { call, mcp } = api();
     const r = await call("lefine_find_similar_key", { appId: APP, text: "coupon applied!" });
-    expect(JSON.parse(r.text)[0]).toMatchObject({ namespace: "checkout", key: "coupon_applied", score: 1 });
+    expect(JSON.parse(r.text)[0]).toMatchObject({ keyId: "key_cpn", namespace: "checkout", key: "coupon_applied", score: 1 });
     expect(mcp).toEqual([]); // answered here, not by the server
   });
 
   it("add_key refuses an existing key, an existing text, a new namespace and broken ICU, saying why", async () => {
     const { call, created } = api();
     expect(await call("lefine_add_key", { appId: APP, namespace: "nav", key: "coupon_applied", sourceText: "Coupon on" })).toMatchObject({ isError: true, text: expect.stringContaining("already exists: checkout.coupon_applied") });
+    // The refusal points at the op that edits it, with the id to give it (strings.keys.update, gap rank 3).
+    expect(await call("lefine_add_key", { appId: APP, namespace: "nav", key: "coupon_applied", sourceText: "Coupon on" })).toMatchObject({ text: expect.stringContaining("strings.keys.update (keyId key_cpn)") });
     expect(await call("lefine_add_key", { appId: APP, namespace: "checkout", key: "coupon_ok", sourceText: "Coupon applied." })).toMatchObject({ isError: true, text: expect.stringContaining("already has a key: checkout.coupon_applied") });
     expect(await call("lefine_add_key", { appId: APP, namespace: "chekout", key: "x", sourceText: "X" })).toMatchObject({ isError: true, text: expect.stringContaining('Namespace "chekout" does not exist') });
     expect(await call("lefine_add_key", { appId: APP, namespace: "checkout", key: "x", sourceText: "{count, plural, one {x}" })).toMatchObject({ isError: true, text: expect.stringContaining("not valid ICU") });
@@ -80,6 +82,15 @@ describe("lefine mcp: find_similar_key and add_key (audit, idea C)", () => {
     expect(r.text).toContain("Added checkout.items");
     expect(r.text).toContain("arguments: n");
     expect(created).toEqual([{ appId: APP, namespace: "checkout", key: "items", sourceText: "{n, plural, one {# item} other {# items}}", description: "Cart badge" }]);
+  });
+
+  it("the tool descriptions name the ops that edit (strings.keys.update, strings.translations.set)", async () => {
+    const { bridge, out } = api();
+    await bridge.handle(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }));
+    const tools = out[0]?.result?.tools as unknown as Array<{ name: string; description?: string }>;
+    expect(tools.find((t) => t.name === "lefine_add_key")?.description).toContain("strings.keys.update");
+    expect(tools.find((t) => t.name === "lefine_add_key")?.description).toContain("strings.translations.set");
+    expect(tools.find((t) => t.name === "lefine_find_similar_key")?.description).toContain("id (key_...)");
   });
 
   it("similarity: same text aside case, punctuation and argument names; else shared words", () => {
