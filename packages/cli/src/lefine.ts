@@ -29,7 +29,7 @@ import {
 import { stringsMissingCommand, stringsUnusedCommand } from "./lefine/strings-usage.js";
 import { lefineDoctorCommand } from "./lefine/doctor-command.js";
 import { stringsSnapshotCommand } from "./lefine/strings-snapshot.js";
-import { appsCommand, keysCreateCommand, keysDeleteCommand, keysListCommand, languagesAddCommand, runsCommand } from "./lefine/strings-manage.js";
+import { appsCommand, keysCreateCommand, keysDeleteCommand, keysListCommand, languagesAddCommand, languagesRemoveCommand, runsCommand } from "./lefine/strings-manage.js";
 
 /* No project env-file loading here, on purpose: a cloned project must not be
    able to set LEFINE_API_URL or LEFINE_TOKEN and redirect the user's key. */
@@ -175,6 +175,10 @@ const languages = strings.command("languages").description("The app's languages"
 projectOptions(languages.command("add <locale>").description("Add a language (a person approves it in Lefine)"))
   .option("--approval <id>", "Run an add a person already approved")
   .action((locale, options) => languagesAddCommand(locale, options));
+projectOptions(languages.command("remove <locale>").description("Remove a language and its translations (a person approves it in Lefine)"))
+  .option("--approval <id>", "Run a remove a person already approved")
+  .option("-y, --yes", "Skip the question here; the person still approves in Lefine")
+  .action((locale, options) => languagesRemoveCommand(locale, options));
 
 program
   .command("apps")

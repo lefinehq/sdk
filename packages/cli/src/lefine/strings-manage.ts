@@ -226,3 +226,28 @@ export async function languagesAddCommand(locale: string, options: StringsOption
     fail(err, options.json);
   }
 }
+
+// ── lefine strings languages remove ───────────────────────────────────
+
+export async function languagesRemoveCommand(locale: string, options: StringsOptions & { approval?: string }, deps: Approvals = {}): Promise<void> {
+  try {
+    const tag = canonicalLocale(locale);
+    const { ops, appId } = await openSession(options, await resolveTarget(options));
+    const impact = await ops.callOp<{ locale: string; translations: number }>("strings.locales.removeImpact", { appId, locale: tag });
+    const count = Number(impact.translations) || 0;
+    const question = count > 0 ? `Remove ${tag} and delete its ${count} translations? Lefine cannot undo it.` : `Remove ${tag}? It has no translations. Lefine cannot undo it.`;
+    if (!(await confirmOrExplain(question, options, deps.ask))) {
+      out(options.json, { removed: false }, () => console.log("  Cancelled. Nothing was removed."));
+      return;
+    }
+    // The yes above is the confirm flag; a person still approves in Lefine.
+    const input = { appId, locale: tag, confirm: true };
+    const done = await (options.approval
+      ? ops.callOp<{ app: AppSummary }>("strings.locales.remove", input, { approval: options.approval })
+      : callWithApproval<{ app: AppSummary }>(ops, "strings.locales.remove", input, waitFor("Removing a language deletes its translations and cannot be undone", options.json, deps))
+    ).catch((err: unknown) => pendingHint(err, `lefine strings languages remove ${tag} --yes`));
+    out(options.json, done, () => console.log(`  ${green("✓")} Removed ${s(tag)}. Languages now: ${[done.app.sourceLocale, ...done.app.targetLocales].map(s).join(", ")}. The next publish takes it off the CDN.`));
+  } catch (err) {
+    fail(err, options.json);
+  }
+}
