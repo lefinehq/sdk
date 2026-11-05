@@ -91,6 +91,12 @@ describe("lefine actions", () => {
     expect(inputFields({ properties: { a: {}, b: {} }, required: ["b"] })).toBe("a, b*");
   });
 
+  it("an empty result names every module the filter takes, brain and sites included", async () => {
+    const empty = (async () => Response.json({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "0 items" }], structuredContent: { items: [] } } })) as typeof fetch;
+    await actionsCommand(["nothing"], {}, empty);
+    expect(logs.join("\n")).toContain("--module strings|content|studio|social|brain|sites|integrations");
+  });
+
   it("refuses a limit over the server's 10 before any call", async () => {
     await expect(actionsCommand([], { limit: "50" })).rejects.toThrow("exit:1");
     expect(calls).toEqual([]);

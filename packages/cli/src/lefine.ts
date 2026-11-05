@@ -203,7 +203,7 @@ projectOptions(
 program
   .command("actions [words...]")
   .description("Search every action this key can run, in every module: name, what it does, its input")
-  .option("--module <module>", "Only strings, content, studio, social or integrations")
+  .option("--module <module>", "Only strings, content, studio, social, brain, sites or integrations")
   .option("--limit <n>", "How many, 1-10 (default 10)")
   .option("--api-url <url>", "API origin")
   .option("--json", "Machine-readable output")
