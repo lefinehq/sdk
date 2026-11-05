@@ -59,4 +59,4 @@ error that says so.
 | `lefine/content/config` | `defineContent`: content types in your repo, for `npx lefine content push` (diff first, never deletes) | build |
 | `lefine/content/live-preview` | `onDocumentSaved`, `ready`: follow Lefine's editor on a draft page; `/react`: `<RefreshOnSave refresh={router.refresh} />` | client |
 | `lefine/compile` | `compile`, `compileMessages` (server, build) | server |
-| `npx lefine` | `init`, `login`, `strings pull/push/check/publish/types`, `content types`, `content push`, `mcp` | CLI |
+| `npx lefine` | `init`, `login`, `doctor`, `apps`, `strings` (`pull`, `push`, `check`, `unused`, `missing`, `publish`, `status`, `types`, `snapshot`, `keys`, `runs`, `languages`), `import`, `migrate`, `content` (`projects`, `pages`, `page`, `publish`, `push`, `types`), `actions`, `run`, `ci trust`, `mcp`. Start with `npx lefine init` | CLI |

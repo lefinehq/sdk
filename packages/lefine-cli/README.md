@@ -30,48 +30,168 @@ The CLI prints a short code and a link, and tries to open your browser. Open the
 
 The key is saved in `~/.lefine/credentials.json`. The folder is private to you (mode 0700) and so is the file (mode 0600). A saved key is only ever sent to the server it was saved for. If `--api-url` or `LEFINE_API_URL` points somewhere else, the CLI stops and tells you to log in again for that server.
 
-## Strings
-
-Every strings command finds the app from `i18n.config.ts` in the current folder, or from `-p <workspace>/<app>`. Add `-d <path>` to use another folder. All except `pull` take `--json` for machine-readable output.
-
-The workspace in your project must be the workspace of your key. If they differ, the CLI stops before it changes anything.
+## Start here: `lefine init`
 
 ```sh
-lefine strings status -p acme/web
+cd my-next-app
+lefine init
+```
+Signs you in if needed, asks which app this folder is, installs `lefine`, and writes `lefine.ts` plus a first translated page. It works for Next.js and TanStack Start. After this, every command below finds the app from `lefine.ts`, so you do not pass `-p`.
+
+- `--app <id|slug>` picks the app without the question (CI).
+- `-d <path>` is the app's folder, `-o <path>` is where `lefine.ts` goes.
+- `--force` replaces an existing `lefine.ts` (never your pages). `--no-install` leaves `package.json` alone.
+
+`lefine apps` lists your workspace's apps with their ids (`app_...`).
+
+## Which project does a command mean?
+
+| Command | Flag | Takes |
+| --- | --- | --- |
+| `init` | `--app` | an app id or slug |
+| `strings ...`, `doctor`, `import`, `ci trust` | `-p, --project` | an app id (`app_...`). `workspace/app` still works as an alias |
+| `content ...` | `-p, --project` | a Content project id or slug (can be left out when the workspace has one) |
+
+Without `-p`, the app comes from `lefine.ts` in the current folder, then from `i18n.config.ts` (older projects). Add `-d <path>` to use another folder. The app must belong to the workspace of your key, or the CLI stops before it changes anything.
+
+## Check your code
+
+```sh
+lefine doctor
+```
+One report and a score from 0 to 100: hard-coded text in your code, texts that break, missing keys and unused keys. `--threshold <score>` fails under that score (default 70). `--verbose` shows every finding.
+
+## Strings
+
+All strings commands except `pull` take `--json` for machine-readable output.
+
+```sh
+lefine strings status
 ```
 Shows the live version, how many changes are waiting to be published, and the last CDN check.
 
 ```sh
-lefine strings pull -p acme/web -o ./locales
+lefine strings pull -o ./locales
 ```
-Downloads the published translations to JSON files. Each file is checked against the sha256 in the manifest, and an empty file is never written. A second pull only downloads the locales that changed since the last one (`--force` downloads all). `-l en,de` picks locales, `--since 12` lists what changed since revision 12, `--cdn-url` reads from another CDN.
+Downloads the published translations to JSON files. Each file is checked against the sha256 in the manifest, and an empty file is never written. A second pull only downloads the locales that changed (`--force` downloads all). `-l en,de` picks locales, `--since 12` lists what changed since revision 12, `--cdn-url` reads from another CDN.
 
 ```sh
-lefine strings push -p acme/web
+lefine strings push
 ```
-Reads your source file (`<output>/<default locale>.json`, shaped `{ "namespace": { "key": "text" } }`), shows what would change, and asks before it applies. `--file <path>` and `--locale <code>` pick another file or locale. Add `--yes` to apply without asking.
+Reads your source file (`<output>/<default locale>.json`, shaped `{ "namespace": { "key": "text" } }`), shows what would change, and asks before it applies. The file can also be YAML, XLIFF, Android XML or `.properties` (`--namespace` names it). `--file <path>` and `--locale <code>` pick another file or language. `--all [folder]` pushes every language file, source first. Add `--yes` to apply without asking.
 
 ```sh
-lefine strings check -p acme/web
+lefine strings check
 ```
-Runs the server checks (placeholders, ICU plurals, markup) and scans your code for keys that are missing from the source file. Problems are grouped by key.
+Runs the server checks (placeholders, ICU plurals, markup) and scans your code for keys missing from the source file. Problems are grouped by key.
 
 ```sh
-lefine strings publish -p acme/web
+lefine strings unused
+lefine strings missing
 ```
-Shows what will go live, asks, publishes, and then waits until every locale is read back from the CDN. Add `--yes` to publish without asking.
+`unused` lists keys in Lefine that your code never uses. `--ci` exits 1 when there is one, `--delete` removes them after a person approves it in Lefine. `missing` lists names in your code that have no key in Lefine. Both take `--namespace <name>`.
 
 ```sh
-lefine strings types -p acme/web
+lefine strings publish
 ```
-Writes `lefine-strings.d.ts` with every key of the app and its source text, including keys added in Lefine that are not published yet. With next-intl or use-intl in your `package.json` (also through `@better-i18n/next` or `@better-i18n/use-intl`), the file registers itself, so `useTranslations("common")("hello", { name })` checks the key and its arguments. `--binding next-intl|use-intl|@lefine/strings|none` overrides the guess (`@lefine/strings` checks namespaces and keys of `createTranslator` and `useStrings`), `-o <file.d.ts>` writes elsewhere. Keep the file inside your tsconfig `include` and run the command again after keys change. Needs `strings:read`.
+A person approves the publish in Lefine (the CLI opens the page and waits). Then it publishes and waits until every locale is read back from the CDN. `--yes` only skips the question in the terminal.
+
+```sh
+lefine strings keys list
+lefine strings keys create common.hello --text "Hello"
+lefine strings keys delete common.hello
+```
+List keys (`--namespace`, `--search`, `--locale`, `--limit`, `--all`), add a key (`--text`, `--description`), or delete keys by `namespace.key` or id. A delete needs a person's approval in Lefine. `--approval <id>` runs one that was already approved.
+
+```sh
+lefine strings runs [id]
+```
+Recent syncs, imports and publishes, or one run with its steps. `--kind` and `--limit` filter.
+
+```sh
+lefine strings languages add de
+```
+Adds a language to the app. A person approves it in Lefine.
+
+```sh
+lefine strings languages remove de
+```
+Removes a language and deletes its translations. It shows how many translations go, asks you first (`-y` skips that question), and a person still approves in Lefine. Lefine cannot undo it. The next publish takes the language off the CDN.
+
+```sh
+lefine strings types
+```
+Writes `lefine-strings.d.ts` with every key of the app and its source text, including keys added in Lefine that are not published yet. With next-intl or use-intl in your `package.json` (also through `@better-i18n/next` or `@better-i18n/use-intl`), the file registers itself, so `useTranslations("common")("hello", { name })` checks the key and its arguments. `--binding next-intl|use-intl|@lefine/strings|none` overrides the guess, `-o <file.d.ts>` writes elsewhere. Keep the file inside your tsconfig `include` and run the command again after keys change. Needs `strings:read`.
+
+```sh
+lefine strings snapshot
+```
+Writes the published texts to `lefine-snapshot.json` for `createLefine({ snapshot })`, so the first request after a deploy is served from it. `-o` writes elsewhere.
+
+## Move in and migrate
+
+```sh
+lefine import ./export --from crowdin
+```
+Moves in from Crowdin, Lokalise, Phrase, Transifex or POEditor: their export (a file or folder of JSON, XLIFF or PO) with keys, translations and review state. `--from` is required. `--locale` sets the language of a file that does not say it, `--include-fuzzy` brings in fuzzy PO entries as reviewed, `--namespace` is for keys with no dot (default `common`), `--state reviewed|approved` is for formats with no review state. Add `--yes` to apply without asking.
+
+```sh
+lefine migrate ./src
+lefine migrate ./src --write
+```
+Moves next-intl and `@better-i18n` code to lefine. It rewrites what maps one to one and lists the rest. It is a dry run unless you pass `--write`. `--lefine-import <path>` sets where your `lefine.ts` is imported from (default `@/lefine`).
 
 ## Content
 
+All content commands take `-p <id|slug>`, `--api-url` and `--json`.
+
 ```sh
-lefine content types -p site
+lefine content projects
+lefine content pages --type post --status published
+lefine content page <id>
 ```
-Writes `lefine-content.ts`: one TypeScript type per content type of your Content project, plus the project's ids and languages, for `lefine/content` (from the `lefine` package). Run it again after you change a content type. Needs a key with `content:read`; `-p` can be left out when the workspace has one Content project.
+`projects` lists your Content projects with their ids and languages. `pages` lists a project's pages, newest first, with what is live in each language. Filters: `--type`, `--search`, `--missing <locale>`, `--slug`, `--status`, `--locale`, `--where field=value` (repeat for more), `--expand`, `--sort`, `--order`, `--limit`, `--all`. `page` shows one page with its languages and data.
+
+```sh
+lefine content publish <id>
+```
+Publishes a page's latest version. A person approves it in Lefine and the CLI waits. `--locales de,fr` limits the languages.
+
+```sh
+lefine content push
+```
+Makes Lefine's content types match your `lefine.config.ts`. It shows the diff first and never deletes. A type change is approved in Lefine. `--dry-run` shows the diff and stops, `-c <path>` picks another config.
+
+```sh
+lefine content types
+```
+Writes `lefine-content.ts`: one TypeScript type per content type of your Content project, plus the project's ids and languages, for `lefine/content` (from the `lefine` package). Run it again after you change a content type. Needs a key with `content:read`.
+
+## Actions
+
+Every module (strings, content, studio, social, integrations) exposes its operations as named actions.
+
+```sh
+lefine actions publish --module strings
+lefine run strings.status --input '{}'
+```
+`actions` searches the actions your key can run: name, what it does, its input. `run <action>` runs one. `--input` is JSON, `@file.json`, or `-` for stdin. An action that asks first waits for a person's yes in Lefine. `--approval <id>` runs one that was already approved.
+
+## CI sign-in without a secret
+
+```sh
+lefine ci trust add acme/web --ref main
+lefine ci trust list
+lefine ci trust remove <id>
+```
+Lets a GitHub repository sign in to the app from GitHub Actions with no stored secret. A person approves `add` in Lefine. `--ref`, `--environment` and `--level read|write|publish` narrow it. `list` shows trusted repositories, `remove` stops one.
+
+## MCP
+
+```sh
+lefine mcp
+```
+Runs Lefine as a local MCP server over stdio, for Claude Desktop and IDEs. Remote clients can use `https://dash.lefine.ai/v1/mcp`.
 
 ## CI
 

@@ -15,6 +15,8 @@ better-i18n scan --format json      # JSON output for tooling
 better-i18n scan --ci               # Exit code 1 if issues found
 better-i18n scan --staged           # Only staged files
 better-i18n scan --verbose          # Detailed output with scan stats
+better-i18n scan --max-issues 20    # Show at most 20 issues
+better-i18n scan --fix              # Wrap hardcoded text with t()
 ```
 
 ## Options
@@ -26,6 +28,8 @@ better-i18n scan --verbose          # Detailed output with scan stats
 | `--ci` | Exit with code 1 if issues found. Useful for blocking PRs. |
 | `--staged` | Only scan git staged files. Perfect for pre-commit hooks. |
 | `--verbose` | Shows detailed output and a **Scan Audit** summary. |
+| `--max-issues <number>` | Maximum issues to display (default 100). |
+| `--fix` | Auto-fix: wrap hardcoded text with `t()`. |
 
 ## Example Output
 
