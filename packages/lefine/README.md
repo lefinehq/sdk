@@ -48,6 +48,7 @@ error that says so.
 | Import | What | Size (gzip) |
 |---|---|---|
 | `lefine/next` | `createLefine`: `proxy`, `getStrings`, `Provider`, `alternates`, `revalidate`, `locales` | server |
+| `lefine/next/content` | `createNextContent`: Content under Next's cache, expired by the publish webhook; draft mode routes and `get()` | server |
 | `lefine/next/link` | `Link` that keeps the locale (Next.js) | client |
 | `lefine/server` | `createStrings`: `getStrings`, `load`, for TanStack Start and any React SSR | server |
 | `lefine/react` | `useStrings`, `StringsProvider` (any React) | 1.7 KB |
@@ -60,3 +61,24 @@ error that says so.
 | `lefine/content/live-preview` | `onDocumentSaved`, `ready`: follow Lefine's editor on a draft page; `/react`: `<RefreshOnSave refresh={router.refresh} />` | client |
 | `lefine/compile` | `compile`, `compileMessages` (server, build) | server |
 | `npx lefine` | `init`, `login`, `doctor`, `apps`, `strings` (`pull`, `push`, `check`, `unused`, `missing`, `publish`, `status`, `types`, `snapshot`, `keys`, `runs`, `languages`), `import`, `migrate`, `content` (`projects`, `pages`, `page`, `publish`, `push`, `types`), `actions`, `run`, `ci trust`, `mcp`. Start with `npx lefine init` | CLI |
+
+## Content in Next.js: cache, publish and draft mode
+
+```ts
+// content.ts
+import { createNextContent } from "lefine/next/content";
+export const content = createNextContent({
+  workspaceId: "ws_...", projectId: "prj_...",
+  preview: { key: process.env.LEFINE_API_KEY! },   // draft mode only; a secret, server only
+});
+
+// app/api/lefine/route.ts: the same webhook as strings. Add it in Lefine for content.entry.published and .unpublished.
+export { POST } from "./handler"; // export const POST = lefine.revalidate
+
+// app/api/lefine/draft/route.ts           ->  export const GET = content.draft.enable;   (?secret=LEFINE_PREVIEW_SECRET&redirect=/blog/x)
+// app/api/lefine/draft/disable/route.ts   ->  export const GET = content.draft.disable;
+
+// a page
+const posts = await (await content.get()).list("post", { locale });   // drafts in draft mode, published otherwise
+// on a draft page: <RefreshOnSave refresh={router.refresh} /> from "lefine/content/live-preview/react"
+```
