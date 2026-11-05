@@ -406,7 +406,11 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
     } catch {}
   }
 
+  let disposed = false;
+  let lastCheck = clock();
+
   async function revalidate(): Promise<void> {
+    lastCheck = clock(); // a manual check counts for the foreground throttle too
     try {
       // Past the TTL on purpose: a foreground check asks the edge (a 304 when nothing changed).
       pending ??= fetchManifest().finally(() => {
@@ -423,11 +427,11 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
   const foreground = config.revalidateOnForeground;
   if (foreground) {
     const minIntervalMs = foreground.minIntervalMs ?? 15 * 60 * 1000;
-    let lastCheck = clock();
     subscription = foreground.appState.addEventListener("change", (state) => {
+      // A listener that could not be removed (addEventListener returned nothing) or an event already queued stays quiet.
+      if (disposed) return;
       const now = clock();
       if (state !== "active" || now - lastCheck < minIntervalMs) return;
-      lastCheck = now;
       void revalidate();
     });
   }
@@ -435,6 +439,7 @@ export function createStringsLoader(config: LoaderConfig): StringsLoader {
   return {
     revalidate,
     dispose() {
+      disposed = true;
       subscription?.remove();
     },
     manifest,

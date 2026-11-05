@@ -596,6 +596,49 @@ describe("foreground revalidate, onUpdate and dispose", () => {
     }
   });
 
+  it("dispose with an AppState whose addEventListener returns nothing: a later or queued event does nothing (R4-1)", async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = setup();
+      let listener: ((state: string) => void) | undefined;
+      const appState = { addEventListener: (_type: "change", l: (state: string) => void) => void (listener = l) };
+      const onUpdate = vi.fn();
+      const loader = make(e, { revalidateOnForeground: { appState, minIntervalMs: 0 }, onUpdate });
+      await loader.load("en");
+      loader.dispose(); // nothing to remove: the loader itself goes quiet
+      publishV2(e);
+      const before = e.requests.length;
+      listener!("active");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(e.requests.length).toBe(before);
+      expect(onUpdate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a manual revalidate() counts for the foreground throttle (R4-2)", async () => {
+    vi.useFakeTimers();
+    try {
+      const { e } = setup();
+      const app = fakeAppState();
+      const loader = make(e, { revalidateOnForeground: { appState: app.appState, minIntervalMs: 60_000 } });
+      await loader.load("en");
+      await vi.advanceTimersByTimeAsync(61_000);
+      await loader.revalidate();
+      const after = e.requests.length;
+      app.emit("active"); // right after a manual check: no second manifest request
+      await vi.advanceTimersByTimeAsync(1);
+      expect(e.requests.length).toBe(after);
+      await vi.advanceTimersByTimeAsync(61_000);
+      app.emit("active");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(e.requests.length).toBeGreaterThan(after);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("an onUpdate that throws does not break the load", async () => {
     const { e } = setup();
     const loader = make(e, { manifestTtlMs: 0, onUpdate: () => { throw new Error("boom"); } });
