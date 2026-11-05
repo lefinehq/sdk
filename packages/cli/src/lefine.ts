@@ -95,7 +95,7 @@ projectOptions(program.command("doctor").description("One report and a 0-100 sco
 strings
   .command("pull")
   .description("Download translations from the CDN to local JSON files")
-  .option("-p, --project <app-id>", "The app's id, app_... (default: from i18n.config.ts). workspace/app also works, as an alias")
+  .option("-p, --project <app-id>", "The app's id, app_... (default: from lefine.ts, else i18n.config.ts). workspace/app also works, as an alias")
   .option("-o, --output <path>", "Output directory (default: ./locales)")
   .option("-l, --locales <codes>", "Comma-separated locale codes (default: all)")
   .option("-d, --dir <path>", "Directory with the config")

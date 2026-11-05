@@ -194,11 +194,12 @@ export interface PullStringsOptions extends StringsOptions {
 
 export async function stringsPullCommand(options: PullStringsOptions): Promise<void> {
   try {
-    const rootDir = resolve(options.dir || process.cwd());
-    const context = options.project ? null : await detectProjectContext(rootDir, false);
+    // Same app lookup as every other strings command: --project, else lefine.ts, else i18n.config.ts.
+    const target = await resolveTarget(options);
     await pullCommand({
       ...options,
-      cdnUrl: options.cdnUrl || process.env.LEFINE_CDN_URL || context?.cdnBaseUrl || DEFAULT_CDN_URL,
+      project: target.appId ?? options.project,
+      cdnUrl: options.cdnUrl || process.env.LEFINE_CDN_URL || target.context?.cdnBaseUrl || DEFAULT_CDN_URL,
     });
   } catch (err) {
     fail(err, options.json);

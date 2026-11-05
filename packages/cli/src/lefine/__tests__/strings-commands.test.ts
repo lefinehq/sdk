@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { safeText } from "../safe-text.js";
-import { canonicalLocale, stringsCheckCommand, stringsPublishCommand, stringsPushCommand, stringsStatusCommand } from "../strings-commands.js";
+import { canonicalLocale, stringsCheckCommand, stringsPullCommand, stringsPublishCommand, stringsPushCommand, stringsStatusCommand } from "../strings-commands.js";
 
 const realFetch = globalThis.fetch;
 const realExit = process.exit;
@@ -560,5 +560,33 @@ describe("lefine strings check", () => {
     expect(checks[1]!.body.input.cursor).toBe("c2");
     expect(logs.join("\n")).toContain("common/hello");
     expect(logs.join("\n")).toContain("changed a variable");
+  });
+});
+
+describe("stringsPullCommand app resolution (SURFACE_GAPS rank 1)", () => {
+  const manifestUrls = () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+    return urls;
+  };
+
+  it("resolves the app from lefine.ts alone (no i18n.config.ts)", async () => {
+    writeFileSync(join(dir, "lefine.ts"), 'export default { project: "app_web1" };\n');
+    const urls = manifestUrls();
+    await expect(stringsPullCommand({ dir })).rejects.toThrow("exit:1");
+    expect(urls.length).toBe(1);
+    expect(urls[0]).toContain("app_web1");
+    expect(logs.join("\n")).not.toContain("i18n.config.ts");
+  });
+
+  it("still honours -p over lefine.ts", async () => {
+    writeFileSync(join(dir, "lefine.ts"), 'export default { project: "app_web1" };\n');
+    const urls = manifestUrls();
+    await expect(stringsPullCommand({ dir, project: "app_other9" })).rejects.toThrow("exit:1");
+    expect(urls[0]).toContain("app_other9");
+    expect(urls[0]).not.toContain("app_web1");
   });
 });
