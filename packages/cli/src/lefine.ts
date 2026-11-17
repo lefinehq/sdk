@@ -29,7 +29,7 @@ import {
 import { stringsMissingCommand, stringsUnusedCommand } from "./lefine/strings-usage.js";
 import { lefineDoctorCommand } from "./lefine/doctor-command.js";
 import { stringsSnapshotCommand } from "./lefine/strings-snapshot.js";
-import { appsCommand, keysCreateCommand, keysDeleteCommand, keysListCommand, languagesAddCommand, runsCommand } from "./lefine/strings-manage.js";
+import { appsCommand, keysCreateCommand, keysDeleteCommand, keysListCommand, languagesAddCommand, languagesRemoveCommand, runsCommand } from "./lefine/strings-manage.js";
 
 /* No project env-file loading here, on purpose: a cloned project must not be
    able to set LEFINE_API_URL or LEFINE_TOKEN and redirect the user's key. */
@@ -57,6 +57,9 @@ program
   .command("init")
   .description("Sign in, pick the app, install lefine, and write lefine.ts plus a first translated page for Next or TanStack Start")
   .option("--app <id|slug>", "The app, without the question (CI)")
+  .option("--create <name>", "Create a new Strings app with this name first (a person approves it in Lefine)")
+  .option("--source-locale <tag>", "With --create: the source language (default: en)")
+  .option("--languages <tags>", "With --create: target languages, comma separated (e.g. de,pt-BR)")
   .option("-d, --dir <path>", "The app's directory")
   .option("-o, --output <path>", "Where lefine.ts goes (default: the framework's place)")
   .option("--force", "Replace an existing lefine.ts (never your pages)")
@@ -95,7 +98,7 @@ projectOptions(program.command("doctor").description("One report and a 0-100 sco
 strings
   .command("pull")
   .description("Download translations from the CDN to local JSON files")
-  .option("-p, --project <app-id>", "The app's id, app_... (default: from i18n.config.ts). workspace/app also works, as an alias")
+  .option("-p, --project <app-id>", "The app's id, app_... (default: from lefine.ts, else i18n.config.ts). workspace/app also works, as an alias")
   .option("-o, --output <path>", "Output directory (default: ./locales)")
   .option("-l, --locales <codes>", "Comma-separated locale codes (default: all)")
   .option("-d, --dir <path>", "Directory with the config")
@@ -175,6 +178,10 @@ const languages = strings.command("languages").description("The app's languages"
 projectOptions(languages.command("add <locale>").description("Add a language (a person approves it in Lefine)"))
   .option("--approval <id>", "Run an add a person already approved")
   .action((locale, options) => languagesAddCommand(locale, options));
+projectOptions(languages.command("remove <locale>").description("Remove a language and its translations (a person approves it in Lefine)"))
+  .option("--approval <id>", "Run a remove a person already approved")
+  .option("-y, --yes", "Skip the question here; the person still approves in Lefine")
+  .action((locale, options) => languagesRemoveCommand(locale, options));
 
 program
   .command("apps")
@@ -199,7 +206,7 @@ projectOptions(
 program
   .command("actions [words...]")
   .description("Search every action this key can run, in every module: name, what it does, its input")
-  .option("--module <module>", "Only strings, content, studio, social or integrations")
+  .option("--module <module>", "Only strings, content, studio, social, brain, sites or integrations")
   .option("--limit <n>", "How many, 1-10 (default 10)")
   .option("--api-url <url>", "API origin")
   .option("--json", "Machine-readable output")

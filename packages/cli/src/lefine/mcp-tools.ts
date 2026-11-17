@@ -9,6 +9,7 @@ import { icuArgs } from "./icu-args.js";
 import type { BridgeAuth } from "./mcp-bridge.js";
 
 interface KeyItem {
+  id?: string;
   namespace: string;
   key: string;
   translations?: Record<string, { text?: string } | undefined>;
@@ -20,7 +21,7 @@ export const LOCAL_TOOLS = [
     description:
       "Find keys of a Lefine app whose name or source text is like the one you want to add. ALWAYS call this before lefine_add_key: " +
       "reuse an existing key instead of adding a duplicate. Give the app id (app_...) and the source text, the key, or both. " +
-      "Returns up to 10 keys with their namespace and source text, closest first.",
+      "Returns up to 10 keys with their id (key_...), namespace and source text, closest first. To change a key you found, use the server's strings.keys.update (its text or description) with that id.",
     inputSchema: {
       type: "object",
       properties: {
@@ -35,9 +36,9 @@ export const LOCAL_TOOLS = [
     name: "lefine_add_key",
     description:
       "Add ONE new key with its source text to a Lefine app. It refuses, and says why, when: the key already exists in any namespace " +
-      "(edit it in Lefine instead); a key with the same source text exists (reuse it, or pass reuse: false after checking); the namespace " +
+      "(change its text with strings.keys.update; its id comes from lefine_find_similar_key); a key with the same source text exists (reuse it, or pass reuse: false after checking); the namespace " +
       "does not exist yet (pass newNamespace: true only if a new namespace is really meant); the text is not valid ICU. " +
-      "A new key is not live: a person publishes it. Call lefine_find_similar_key first.",
+      "A new key is not live: a person publishes it. Other languages: strings.translations.set writes one translation (asks first). Call lefine_find_similar_key first.",
     inputSchema: {
       type: "object",
       properties: {
@@ -100,7 +101,7 @@ export async function findSimilar(ops: OpClient, args: Args) {
     .map((item) => {
       const source = item.translations?.[sourceLocale]?.text ?? "";
       const score = Math.max(similarity(want, source), key ? similarity(key.replace(/[._]/g, " "), item.key.replace(/[._]/g, " ")) : 0);
-      return { namespace: item.namespace, key: item.key, sourceText: source, score: Math.round(score * 100) / 100 };
+      return { ...(item.id ? { keyId: item.id } : {}), namespace: item.namespace, key: item.key, sourceText: source, score: Math.round(score * 100) / 100 };
     })
     .filter((s) => s.score > 0.3)
     .sort((a, b) => b.score - a.score)
@@ -123,7 +124,8 @@ export async function addKey(ops: OpClient, args: Args) {
   const sameKey = (await search(ops, appId, sourceLocale, key)).filter((k) => k.key === key);
   if (sameKey.length > 0) {
     const where = sameKey.map((k) => `${k.namespace}.${k.key}`).join(", ");
-    return text(`The key already exists: ${where}. Edit its text in Lefine instead of adding it again.`, true);
+    const ids = sameKey.filter((k) => k.id).map((k) => k.id).join(", ");
+    return text(`The key already exists: ${where}. Do not add it again; change its text with strings.keys.update${ids ? ` (keyId ${ids})` : ""}.`, true);
   }
   if (args.reuse !== false) {
     const same = (await candidates(ops, appId, sourceLocale, sourceText)).filter((k) => similarity(sourceText, k.translations?.[sourceLocale]?.text ?? "") === 1);

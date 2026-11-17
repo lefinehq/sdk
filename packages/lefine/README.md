@@ -48,6 +48,7 @@ error that says so.
 | Import | What | Size (gzip) |
 |---|---|---|
 | `lefine/next` | `createLefine`: `proxy`, `getStrings`, `Provider`, `alternates`, `revalidate`, `locales` | server |
+| `lefine/next/content` | `createNextContent`: Content under Next's cache, expired by the publish webhook; draft mode routes and `get()` | server |
 | `lefine/next/link` | `Link` that keeps the locale (Next.js) | client |
 | `lefine/server` | `createStrings`: `getStrings`, `load`, for TanStack Start and any React SSR | server |
 | `lefine/react` | `useStrings`, `StringsProvider` (any React) | 1.7 KB |
@@ -59,4 +60,30 @@ error that says so.
 | `lefine/content/config` | `defineContent`: content types in your repo, for `npx lefine content push` (diff first, never deletes) | build |
 | `lefine/content/live-preview` | `onDocumentSaved`, `ready`: follow Lefine's editor on a draft page; `/react`: `<RefreshOnSave refresh={router.refresh} />` | client |
 | `lefine/compile` | `compile`, `compileMessages` (server, build) | server |
-| `npx lefine` | `init`, `login`, `strings pull/push/check/publish/types`, `content types`, `content push`, `mcp` | CLI |
+| `npx lefine` | `init`, `login`, `doctor`, `apps`, `strings` (`pull`, `push`, `check`, `unused`, `missing`, `publish`, `status`, `types`, `snapshot`, `keys`, `runs`, `languages`), `import`, `migrate`, `content` (`projects`, `pages`, `page`, `publish`, `push`, `types`), `actions`, `run`, `ci trust`, `mcp`. Start with `npx lefine init` | CLI |
+
+## Content in Next.js: cache, publish and draft mode
+
+```ts
+// content.ts
+import { createNextContent } from "lefine/next/content";
+export const content = createNextContent({
+  workspaceId: "ws_...", projectId: "prj_...",
+  preview: { key: process.env.LEFINE_PREVIEW_KEY! }, // draft mode only; a content:read-only key, server only
+});
+
+// app/api/lefine/route.ts: the same webhook as strings. Add it in Lefine for content.entry.published and .unpublished.
+export { POST } from "./handler"; // export const POST = lefine.revalidate
+
+// app/api/lefine/draft/route.ts           ->  export const GET = content.draft.enable;   (?secret=LEFINE_PREVIEW_SECRET&redirect=/blog/x)
+// app/api/lefine/draft/disable/route.ts   ->  export const GET = content.draft.disable;
+
+// a page
+const posts = await (await content.get()).list("post", { locale });   // drafts in draft mode, published otherwise
+// on a draft page: <RefreshOnSave refresh={router.refresh} /> from "lefine/content/live-preview/react"
+```
+
+Two keys, two jobs:
+
+- `LEFINE_PREVIEW_KEY` must be a key with the `content:read` scope **only**. Draft mode never writes, so do not reuse your app's broad or publish key here.
+- `LEFINE_PREVIEW_SECRET` is a long random string you choose. It travels in the enable URL (`?secret=`), so it lands in access logs and browser history. Give it to editors only, and rotate it when someone leaves. The enable route is a GET; a POST variant is not built.

@@ -1,5 +1,9 @@
 # lefine
 
+## Unreleased
+
+- React Native: `createStrings({ revalidateOnForeground: { appState: AppState }, onUpdate })` checks the edge when the app returns to the foreground (at most every 15 min, `minIntervalMs`) and fetches a new release of the languages already loaded. `onUpdate({ locale, stamp })` fires once it is in; call `load` again to re-render. `strings.dispose()` stops the listener, `strings.revalidate()` checks now. The `lefine/server` bundle budget in its test went from 9 to 9.5 KB gzip for this (examples/expo shows the pattern). Same shape as `@better-i18n/expo`.
+
 ## 0.8.1
 
 ### Patch Changes

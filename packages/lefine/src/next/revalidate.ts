@@ -1,6 +1,15 @@
 import { revalidateTag } from "next/cache";
 
 export const TAG = "lefine-strings";
+/** The cache tag of everything `createNextContentClient` reads from the edge. */
+export const CONTENT_TAG = "lefine-content";
+
+/** Lefine event -> the cache tag it empties. Content pages: live (entry.published) or offline (entry.unpublished). */
+const TAG_OF_EVENT: Record<string, string> = {
+  "strings.release.published": TAG,
+  "content.entry.published": CONTENT_TAG,
+  "content.entry.unpublished": CONTENT_TAG,
+};
 const TOLERANCE_S = 300;
 
 const enc = new TextEncoder();
@@ -21,7 +30,8 @@ function same(a: string, b: string): boolean {
 /**
  * The publish webhook: `export const POST = lefine.revalidate` in app/api/lefine/route.ts, and that URL as a
  * webhook in Lefine. Checks X-Lefine-Signature (`t=<unix>,v1=<hmac-sha256 of "t.body">`, Lefine's scheme) with
- * LEFINE_WEBHOOK_SECRET, then expires the strings cache tag, so the next request reads the new release.
+ * LEFINE_WEBHOOK_SECRET, then expires the cache tag of the event: the strings tag on strings.release.published, the content tag on
+ * content.entry.published and content.entry.unpublished, so the next request reads what was published.
  */
 export async function revalidate(request: Request, now = Date.now()): Promise<Response> {
   const secret = process.env.LEFINE_WEBHOOK_SECRET;
@@ -35,8 +45,9 @@ export async function revalidate(request: Request, now = Date.now()): Promise<Re
   if (!t || !v1 || Math.abs(now / 1000 - Number(t)) > TOLERANCE_S || !same(v1, await sign(secret, `${t}.${body}`))) {
     return Response.json({ error: "bad signature" }, { status: 401 });
   }
-  if (request.headers.get("x-lefine-event") !== "strings.release.published") return Response.json({ ignored: true });
+  const tag = TAG_OF_EVENT[request.headers.get("x-lefine-event") ?? ""];
+  if (!tag) return Response.json({ ignored: true });
   // Next 16 takes a profile; expire: 0 means the next request waits for fresh texts instead of getting stale ones.
-  (revalidateTag as (tag: string, profile?: { expire: number }) => void)(TAG, { expire: 0 });
+  (revalidateTag as (tag: string, profile?: { expire: number }) => void)(tag, { expire: 0 });
   return Response.json({ revalidated: true });
 }

@@ -30,37 +30,46 @@ class NotOk extends Error {
   }
 }
 
-// A thrown error is not cached, so a versioned file that is not there yet is asked again (through `minute`).
-const forever = unstable_cache(
-  async (url: string) => {
-    const got = await get(url);
-    if (got.status !== 200) throw new NotOk(got);
-    return got;
-  },
-  ["lefine-edge-file"],
-  { tags: [TAG], revalidate: false },
-);
-const minute = unstable_cache(get, ["lefine-edge"], { tags: [TAG], revalidate: 60 });
+/**
+ * One Next-cached fetch per tag: strings use `lefine-strings`, content `lefine-content`, so a strings release does not
+ * empty the content cache and the other way round. `name` keeps their cache keys apart.
+ */
+export function createNextFetch(tag: string, name: string): typeof fetch {
+  // A thrown error is not cached, so a versioned file that is not there yet is asked again (through `minute`).
+  const forever = unstable_cache(
+    async (url: string) => {
+      const got = await get(url);
+      if (got.status !== 200) throw new NotOk(got);
+      return got;
+    },
+    [`${name}-file`],
+    { tags: [tag], revalidate: false },
+  );
+  const minute = unstable_cache(get, [name], { tags: [tag], revalidate: 60 });
 
-async function cached(url: string): Promise<Got> {
-  if (!VERSIONED.test(url)) return minute(url);
-  try {
-    return await forever(url);
-  } catch (err) {
-    if (err instanceof NotOk) return minute(url);
-    throw err;
+  async function cached(url: string): Promise<Got> {
+    if (!VERSIONED.test(url)) return minute(url);
+    try {
+      return await forever(url);
+    } catch (err) {
+      if (err instanceof NotOk) return minute(url);
+      throw err;
+    }
   }
+
+  // Headers (If-None-Match) are not sent: the cache answers with the whole body.
+  return (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const answer = cached(url).then(
+      (got) => new Response(got.body, { status: got.status, headers: { ...(got.type ? { "content-type": got.type } : {}), ...(got.etag ? { etag: got.etag } : {}) } }),
+    );
+    // The loader's timeout still ends a call that waits too long, even though the cached read cannot be cancelled.
+    const signal = init?.signal;
+    if (!signal) return answer;
+    if (signal.aborted) return Promise.reject(signal.reason);
+    return Promise.race([answer, new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }))]);
+  };
 }
 
-/** The loader's fetch under Next. Headers (If-None-Match) are not sent: the cache answers with the whole body. */
-export const nextFetch: typeof fetch = (input, init) => {
-  const url = input instanceof Request ? input.url : String(input);
-  const answer = cached(url).then(
-    (got) => new Response(got.body, { status: got.status, headers: { ...(got.type ? { "content-type": got.type } : {}), ...(got.etag ? { etag: got.etag } : {}) } }),
-  );
-  // The loader's timeout still ends a call that waits too long, even though the cached read cannot be cancelled.
-  const signal = init?.signal;
-  if (!signal) return answer;
-  if (signal.aborted) return Promise.reject(signal.reason);
-  return Promise.race([answer, new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }))]);
-};
+/** The strings loader's fetch under Next. */
+export const nextFetch: typeof fetch = createNextFetch(TAG, "lefine-edge");

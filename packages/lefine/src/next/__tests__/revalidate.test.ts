@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const revalidateTag = vi.fn();
 vi.mock("next/cache", () => ({ revalidateTag }));
-const { revalidate, TAG } = await import("../revalidate.js");
+const { revalidate, TAG, CONTENT_TAG } = await import("../revalidate.js");
 
 const SECRET = "whsec_test";
 const NOW = 1_800_000_000_000;
@@ -34,6 +34,13 @@ describe("revalidate (the publish webhook)", () => {
     expect((await call({ ...event, "x-lefine-signature": signed(NOW / 1000) }, body + " "))).toMatchObject({ status: 401 });
     expect((await call(event)).status).toBe(401);
     expect(revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it.each(["content.entry.published", "content.entry.unpublished"])("a signed %s expires the content tag, not the strings tag", async (event) => {
+    const res = await call({ "x-lefine-signature": signed(NOW / 1000), "x-lefine-event": event });
+    expect(res.status).toBe(200);
+    expect(revalidateTag).toHaveBeenCalledTimes(1);
+    expect(revalidateTag).toHaveBeenCalledWith(CONTENT_TAG, { expire: 0 });
   });
 
   it("another event is acknowledged and ignored", async () => {

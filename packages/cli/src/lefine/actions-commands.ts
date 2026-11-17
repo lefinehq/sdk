@@ -97,7 +97,7 @@ export async function actionsCommand(words: string[], options: ActionsOptions, f
     const items = await findActions(authOrFail(options), { ...(query ? { query } : {}), ...(options.module ? { module: options.module } : {}), limit }, fetcher);
     out(options.json, { items }, () => {
       console.log();
-      if (items.length === 0) console.log("  Nothing matched. Try other words, or only --module strings|content|studio|social|integrations.");
+      if (items.length === 0) console.log("  Nothing matched. Try other words, or only --module strings|content|studio|social|brain|sites|integrations.");
       for (const a of items) {
         console.log(`  ${cyan(s(a.action))}  ${dim(s(a.module))}${a.asksFirst ? `  ${yellow("asks a person first")}` : ""}`);
         console.log(`    ${s(a.summary)}`);

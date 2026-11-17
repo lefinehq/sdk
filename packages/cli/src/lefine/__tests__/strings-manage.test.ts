@@ -3,13 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { appBase } from "../../utils/cdn-client.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appsCommand, keysCreateCommand, keysDeleteCommand, keysListCommand, languagesAddCommand, runsCommand } from "../strings-manage.js";
+import { appsCommand, keysCreateCommand, keysDeleteCommand, keysListCommand, languagesAddCommand, languagesRemoveCommand, runsCommand } from "../strings-manage.js";
 
 const realFetch = globalThis.fetch;
 const realExit = process.exit;
 const realLog = console.log;
 const realErr = console.error;
 const realTty = process.stdin.isTTY;
+const realOutTty = process.stdout.isTTY;
 let dir: string;
 let logs: string[];
 let calls: Array<{ name: string; input: any; approval?: string }>;
@@ -21,7 +22,7 @@ const APPROVAL = { id: "apr_9", url: "https://dash.lefine.ai/approvals/apr_9", e
 const KEY = (id: string, namespace: string, key: string, en: string) => ({ id, appId: APP.id, namespace, key, translations: { en: { text: en, state: "approved" } } });
 const RUN = { id: "run_1", kind: "publish", status: "failed", createdAt: "2026-10-27T09:00:00Z", steps: [{ name: "Build snapshot", status: "failed", detail: "not valid ICU" }], counts: { source: 2, pushed: 0, live: null }, tally: { created: 0, updated: 0, skipped: 0, dropped: 0 }, failure: { step: "Build snapshot", reason: "nav.home is not valid ICU.", fixAction: "Fix the text in Lefine and publish again" } };
 
-const ASKS_FIRST = new Set(["strings.keys.delete", "strings.locales.add"]);
+const ASKS_FIRST = new Set(["strings.keys.delete", "strings.locales.add", "strings.locales.remove"]);
 function server() {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -43,6 +44,8 @@ function server() {
       "strings.keys.delete": { deleted: body.input.keyIds?.length },
       "strings.runs.list": { items: [RUN] },
       "strings.runs.get": RUN,
+      "strings.locales.removeImpact": { locale: body.input.locale, translations: 12 },
+      "strings.locales.remove": { app: { ...APP, targetLocales: [] } },
       "strings.locales.add": { app: { ...APP, targetLocales: ["tr", body.input.locale] } },
     };
     return name in data ? Response.json({ ok: true, data: data[name] }) : Response.json({ ok: false, error: { code: "NOT_FOUND", message: name } }, { status: 404 });
@@ -72,6 +75,7 @@ afterEach(() => {
   console.log = realLog;
   console.error = realErr;
   (process.stdin as { isTTY?: boolean }).isTTY = realTty;
+  (process.stdout as { isTTY?: boolean }).isTTY = realOutTty;
   delete process.env.LEFINE_HOME;
   delete process.env.LEFINE_TOKEN;
   delete process.env.LEFINE_API_URL;
@@ -150,6 +154,39 @@ describe("lefine strings languages add", () => {
     let t = 0;
     await expect(languagesAddCommand("de", opts(), { ...fast, now: () => (t += 60_000), approvalWaitMs: 100_000 })).rejects.toThrow("exit:1");
     expect(text()).toContain("run lefine strings languages add de --approval apr_9");
+  });
+});
+
+describe("lefine strings languages remove", () => {
+  it("shows the impact, asks, then removes with confirm after a person approves", async () => {
+    (process.stdin as { isTTY?: boolean }).isTTY = true;
+    (process.stdout as { isTTY?: boolean }).isTTY = true;
+    let question = "";
+    await languagesRemoveCommand("TR", opts(), { ...fast, ask: async (q: any) => ((question = q.message), true) });
+    expect(question).toContain("delete its 12 translations");
+    const names = calls.map((c) => c.name).filter((n) => n.startsWith("strings.locales"));
+    expect(names).toEqual(["strings.locales.removeImpact", "strings.locales.remove", "strings.locales.remove"]);
+    expect(calls.find((c) => c.name === "strings.locales.remove")?.input).toEqual({ appId: "app_web1", locale: "tr", confirm: true });
+    expect(text()).toContain("Removed tr.");
+  });
+
+  it("a no removes nothing; without --yes outside a terminal it refuses", async () => {
+    (process.stdin as { isTTY?: boolean }).isTTY = true;
+    (process.stdout as { isTTY?: boolean }).isTTY = true;
+    await languagesRemoveCommand("tr", opts(), { ...fast, ask: async () => false });
+    (process.stdin as { isTTY?: boolean }).isTTY = false;
+    expect(calls.some((c) => c.name === "strings.locales.remove")).toBe(false);
+    expect(text()).toContain("Nothing was removed");
+    await expect(languagesRemoveCommand("tr", opts(), fast)).rejects.toThrow("exit:1");
+  });
+
+  it("--yes skips the question; unanswered, it names the --approval rerun", async () => {
+    await languagesRemoveCommand("tr", { ...opts(), yes: true }, fast);
+    expect(text()).toContain("Removed tr.");
+    approvalAnswers = [];
+    let t = 0;
+    await expect(languagesRemoveCommand("tr", { ...opts(), yes: true }, { ...fast, now: () => (t += 60_000), approvalWaitMs: 100_000 })).rejects.toThrow("exit:1");
+    expect(text()).toContain("run lefine strings languages remove tr --yes --approval apr_9");
   });
 });
 

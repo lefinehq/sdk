@@ -113,12 +113,13 @@ describe("lefine/server: strings for any React SSR app (TanStack Start first)", 
       expect(code).not.toMatch(/["']next\//);
       // Until 2026-10-27 it imported react (t.rich keys) and failed to load in a Vue app without React.
       expect(code).not.toMatch(/from ["']react["']/);
-      // On a device (React Native) or in a browser it ships whole, compiler included: budget 9 KB gzip (about 7.6 KB with
-      // the device storage, 2026-10-27; 8.5 KB with the synchronous SHA-256 that Cache Components need, 2026-10-28).
+      // On a device (React Native) or in a browser it ships whole, compiler included: budget 9.5 KB gzip (about 7.6 KB with
+      // the device storage, 2026-10-27; 8.5 KB with the synchronous SHA-256 that Cache Components need, 2026-10-28;
+      // 9.0 KB with foreground revalidate, onUpdate and dispose, 2026-11-05: surface gap 8).
       const min = execFileSync("bun", ["build", entry, "--minify", "--target=browser", "--format=esm"], { encoding: "utf-8" });
       const gz = gzipSync(min).length;
       console.log(`lefine/server (device or browser): ${gz} B gzip`);
-      expect(gz).toBeLessThan(9216);
+      expect(gz).toBeLessThan(9728);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
