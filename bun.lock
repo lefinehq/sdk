@@ -157,7 +157,7 @@
     },
     "packages/lefine": {
       "name": "lefine",
-      "version": "0.11.0",
+      "version": "0.11.1",
       "bin": {
         "lefine": "./dist/cli.js",
       },
@@ -188,7 +188,7 @@
     },
     "packages/lefine-cli": {
       "name": "@lefine/cli",
-      "version": "0.12.0",
+      "version": "0.12.1",
       "bin": {
         "lefine": "./dist/lefine.js",
       },
@@ -208,7 +208,7 @@
     },
     "packages/lefine-mcp": {
       "name": "@lefine/mcp",
-      "version": "1.0.0-rc.1",
+      "version": "1.0.0-rc.2",
       "bin": {
         "lefine-mcp": "./bin/lefine-mcp.js",
       },

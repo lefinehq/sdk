@@ -1,5 +1,11 @@
 # @lefine/cli
 
+## 0.12.1
+
+### Patch Changes
+
+- Same source as `lefine` 0.11.1. The MCP locale import reply says how each text was saved: source-language texts as approved, the other languages as reviewed, not approved. Before, it did not say.
+
 ## 0.12.0
 
 ### Minor Changes

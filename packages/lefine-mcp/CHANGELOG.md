@@ -1,5 +1,11 @@
 # @lefine/mcp
 
+## 1.0.0-rc.2
+
+### Patch Changes
+
+- Depends on `lefine ^0.11.1` (the import reply says what was saved). First release published from GitHub Actions with npm trusted publishing (OIDC, no token).
+
 ## 1.0.0-rc.1
 
 ### Patch Changes

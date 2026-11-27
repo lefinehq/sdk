@@ -1,5 +1,11 @@
 # lefine
 
+## 0.11.1
+
+### Patch Changes
+
+- The MCP locale import reply says how each text was saved: source-language texts as approved, the other languages as reviewed, not approved. Before, it did not say.
+
 ## 0.11.0
 
 ### Minor Changes
