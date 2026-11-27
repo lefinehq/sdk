@@ -38,7 +38,19 @@ function stubOps(overrides: Record<string, (input: any) => unknown> = {}): OpCli
     },
   };
 }
-const mkctx = (ops: OpClient = stubOps()): LocalCtx => ({ ops, cwd: dir, roots: allowedRoots(dir) });
+/** `write` here stands for the server\'s lefine_write: it runs the stubbed action. (The bridge path is tested in mcp-security.test.ts.) */
+const mkctx = (ops: OpClient = stubOps()): LocalCtx => ({
+  ops,
+  cwd: dir,
+  roots: allowedRoots(dir),
+  write: async (action, input) => {
+    try {
+      return { ok: true, needsApproval: false, text: "ok", data: await ops.callOp(action, input) };
+    } catch (err) {
+      return { ok: false, needsApproval: false, text: err instanceof LefineError ? `${err.code}: ${err.message}` : String(err) };
+    }
+  },
+});
 
 beforeEach(() => {
   dir = realpathSync(mkdtempSync(join(tmpdir(), "lefine-local-")));
@@ -217,7 +229,7 @@ describe("lefine_import_locale_files", () => {
     expect(items[0]!.input).toMatchObject({ locale: "de", namespace: "app" });
   });
 
-  test("dry run (the default) writes nothing, shows counts and a confirmPlan; apply needs that code", async () => {
+  test("dry run (the default) writes nothing, shows counts and a plan id; a stale id stops the apply, a missing one is not consent", async () => {
     writeFileSync(join(dir, "en.json"), JSON.stringify({ nav: { save: "Save" } }));
     writeFileSync(join(dir, "fr.json"), JSON.stringify({ nav: { save: "Enregistrer" } }));
     const ops = stubOps({ "strings.import.preview": () => preview(), "strings.import.apply": () => run() });
@@ -228,10 +240,8 @@ describe("lefine_import_locale_files", () => {
     expect(dry!.content[0]!.text).toContain("Nothing was written");
     expect(dry!.content[0]!.text).toContain("not a language of this app: fr");
     expect(calls.some((x) => x.name === "strings.import.apply")).toBe(false);
-    const code = dry!.structuredContent!.confirmPlan as string;
+    const code = dry!.structuredContent!.plan as string;
 
-    const noCode = await callLocal("lefine_import_locale_files", { path: ".", app: "web", dryRun: false }, c, DEFAULT_OPTIONS);
-    expect(noCode!.isError).toBe(true);
     const wrong = await callLocal("lefine_import_locale_files", { path: ".", app: "web", dryRun: false, confirmPlan: "deadbeef" }, c, DEFAULT_OPTIONS);
     expect(wrong!.isError).toBe(true);
     expect(calls.some((x) => x.name === "strings.import.apply")).toBe(false);
@@ -249,7 +259,7 @@ describe("lefine_import_locale_files", () => {
     const c = mkctx(ops);
     const dry = await callLocal("lefine_import_locale_files", { path: "en.json", app: "web" }, c, DEFAULT_OPTIONS);
     digest = "b".repeat(64);
-    const r = await callLocal("lefine_import_locale_files", { path: "en.json", app: "web", dryRun: false, confirmPlan: dry!.structuredContent!.confirmPlan }, c, DEFAULT_OPTIONS);
+    const r = await callLocal("lefine_import_locale_files", { path: "en.json", app: "web", dryRun: false, confirmPlan: dry!.structuredContent!.plan }, c, DEFAULT_OPTIONS);
     expect(r!.isError).toBe(true);
     expect(calls.some((x) => x.name === "strings.import.apply")).toBe(false);
   });
@@ -258,7 +268,7 @@ describe("lefine_import_locale_files", () => {
     const ops = stubOps({ "strings.import.preview": () => preview(), "strings.import.apply": () => run("failed") });
     const c = mkctx(ops);
     const dry = await callLocal("lefine_import_locale_files", { path: "en.json", app: "web" }, c, DEFAULT_OPTIONS);
-    const r = await callLocal("lefine_import_locale_files", { path: "en.json", app: "web", dryRun: false, confirmPlan: dry!.structuredContent!.confirmPlan }, c, DEFAULT_OPTIONS);
+    const r = await callLocal("lefine_import_locale_files", { path: "en.json", app: "web", dryRun: false, confirmPlan: dry!.structuredContent!.plan }, c, DEFAULT_OPTIONS);
     expect(r!.isError).toBe(true);
     expect(r!.content[0]!.text).toContain("did not finish cleanly");
     expect(calls.filter((x) => x.name === "strings.import.apply").length).toBe(1);

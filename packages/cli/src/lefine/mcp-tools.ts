@@ -4,9 +4,9 @@
  * reference incident: an agent made 1005 phantom keys by creating in the wrong namespace instead of updating.
  */
 
-import { createOpClient, type OpClient } from "./client.js";
+import type { OpClient } from "./client.js";
 import { icuArgs } from "./icu-args.js";
-import type { BridgeAuth } from "./mcp-bridge.js";
+import type { ServerWrite } from "./mcp-result.js";
 
 interface KeyItem {
   id?: string;
@@ -109,7 +109,7 @@ export async function findSimilar(ops: OpClient, args: Args) {
   return text(scored.length === 0 ? "No similar key. A new one is fine." : JSON.stringify(scored, null, 1));
 }
 
-export async function addKey(ops: OpClient, args: Args) {
+export async function addKey(ops: OpClient, args: Args, write: (action: string, input: unknown) => Promise<ServerWrite>) {
   const appId = String(args.appId ?? "");
   const namespace = String(args.namespace ?? "").trim();
   const key = String(args.key ?? "").trim();
@@ -133,27 +133,16 @@ export async function addKey(ops: OpClient, args: Args) {
       return text(`This text already has a key: ${same.map((k) => `${k.namespace}.${k.key}`).join(", ")}. Use it in code. If yours means something else, call again with reuse: false.`, true);
     }
   }
-  await ops.callOp("strings.keys.create", {
+  const made = await write("strings.keys.create", {
     appId,
     namespace,
     key,
     sourceText,
     ...(typeof args.description === "string" && args.description.trim() ? { description: args.description.trim() } : {}),
   });
+  if (!made.ok) return text(made.needsApproval ? `Not added: a person must approve it in Lefine first. ${made.text}` : made.text, true);
   const typed = Object.keys(icuArgs(sourceText) ?? {});
   return text(
     `Added ${namespace}.${key}. It is not live until someone publishes in Lefine. Run \`npx lefine strings types\` so the editor knows it${typed.length ? ` (arguments: ${typed.join(", ")})` : ""}.`,
   );
-}
-
-/** A tools/call for one of LOCAL_TOOLS, answered here; null for the server's tools. */
-export async function callLocalTool(auth: BridgeAuth, name: string, args: Args) {
-  const ops = createOpClient(auth.apiUrl, auth.token);
-  try {
-    if (name === "lefine_find_similar_key") return await findSimilar(ops, args);
-    if (name === "lefine_add_key") return await addKey(ops, args);
-    return null;
-  } catch (err) {
-    return text(`Lefine refused: ${err instanceof Error ? err.message : String(err)}`, true);
-  }
 }

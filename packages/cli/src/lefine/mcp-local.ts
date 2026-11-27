@@ -106,19 +106,19 @@ const TOOLS: LocalTool[] = [
       name: "lefine_import_locale_files",
       description:
         "Push local translation files (JSON, YAML, Android XML, XLIFF, .properties, .po) into a Strings app, in two steps. " +
-        "FIRST call with dryRun left out: nothing is written; you get counts per file and a confirmPlan code. Show the person the counts. " +
-        "THEN call again with dryRun: false and that confirmPlan: it imports exactly what was shown, or nothing if it changed. Imported texts are drafts; a publish is separate. " +
+        "FIRST call with dryRun left out: nothing is written; you get counts per file and a plan id. Show the person the counts. " +
+        "THEN call again with dryRun: false: it is a normal Lefine write, so the server may ask a person to approve it first (then it says where). Imported texts are drafts; a publish is separate. Only locale file types are read (.json .arb .yaml .yml .xml .xlf .xliff .properties .po). " +
         "Files: de.json = { namespace: { key: text } }, or de/common.yaml, or common.yaml (source language; pass locale for another).",
       inputSchema: {
         type: "object",
         properties: {
           path: { type: "string", description: "A locale file, or a folder of them (3 levels deep, 200 files, 20 MB)." },
           app: { type: "string", description: "Strings app name, slug or id (app_...). Left out: the one in lefine.ts." },
-          format: { type: "string", enum: ["json", "yaml", "xml", "xliff", "properties", "po"], description: "Only when the file name does not say." },
+          format: { type: "string", enum: ["json", "yaml", "xml", "xliff", "properties", "po"], description: "How to parse the file. It never widens which files are read: the extension must be a locale type." },
           locale: { type: "string", description: "Language of files that do not say (default: the app's source language)." },
           namespace: { type: "string", description: "Namespace for a file named for its language." },
-          dryRun: { type: "boolean", description: "Default true. false writes, and needs confirmPlan." },
-          confirmPlan: { type: "string", description: "The code the dry run gave." },
+          dryRun: { type: "boolean", description: "Default true. false writes (through the server, which may ask a person first)." },
+          confirmPlan: { type: "string", description: "Optional: the plan id the dry run gave; a stale one stops the import. It is not an approval." },
         },
         required: ["path"],
         additionalProperties: false,
@@ -139,7 +139,7 @@ const TOOLS: LocalTool[] = [
     def: { ...coding("lefine_add_key"), annotations: ann("Add one key", false) },
     write: true,
     toolset: "strings",
-    run: (ctx, args) => addKey(ctx.ops, args) as Promise<ToolResult>,
+    run: (ctx, args) => addKey(ctx.ops, args, ctx.write) as Promise<ToolResult>,
   },
 ];
 

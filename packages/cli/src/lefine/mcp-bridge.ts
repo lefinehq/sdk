@@ -11,7 +11,8 @@
  * What it adds on top of a plain proxy:
  *  - tools/list comes from the server (all pages), is kept for `toolsTtlMs`, and is served stale when the
  *    server cannot be reached; the local tools (mcp-local.ts) are appended.
- *  - tools/call of a local tool is answered here (it needs your disk); every other call is forwarded.
+ *  - tools/call of a local tool is answered here (it needs your disk); every other call is forwarded. A local
+ *    tool never writes by itself: its write goes to the server as a lefine_write call (approvals, ledger, ?level=read).
  *  - --read-only and --toolsets (mcp-config.ts) hide tools and refuse calls; --read-only also asks the
  *    server for a read ceiling, so a tool this file does not know still cannot write.
  *  - a 401 becomes one clear sentence: run `npx @lefine/mcp setup`.
@@ -23,7 +24,7 @@ import { type McpOptions, DEFAULT_OPTIONS, guardRemoteCall, remoteToolVisible } 
 import { callLocal, isLocalTool, localToolDefs } from "./mcp-local.js";
 import { allowedRoots } from "./mcp-paths.js";
 import { createOpClient } from "./client.js";
-import { errResult } from "./mcp-result.js";
+import { type ServerWrite, errResult } from "./mcp-result.js";
 
 export interface BridgeAuth {
   token: string;
@@ -75,14 +76,17 @@ export function createBridge(deps: BridgeDeps) {
 
   const getRoots = (): string[] => {
     if (roots) return roots;
+    const warn = (line: string) => deps.log(line);
     try {
-      roots = allowedRoots(cwd, options.allowDirs);
+      roots = allowedRoots(cwd, options.allowDirs, { warn });
     } catch (err) {
-      deps.log(`lefine-mcp: ${err instanceof Error ? err.message : String(err)} Local tools read only ${cwd}.`);
-      roots = allowedRoots(cwd, []);
+      deps.log(`lefine-mcp: ${err instanceof Error ? err.message : String(err)} --allow-dir is ignored.`);
+      roots = allowedRoots(cwd, [], { warn });
     }
     return roots;
   };
+  // Decided at start, so a refused root is said on stderr once, up front, not at the first call.
+  getRoots();
 
   const reply = (id: unknown, code: number, message: string) => {
     if (id === undefined || id === null) return;
@@ -184,6 +188,38 @@ export function createBridge(deps: BridgeDeps) {
     return cache;
   }
 
+  let writeId = 0;
+
+  /**
+   * A write for a local tool, sent as the server's own lefine_write call (POST /v1/mcp, with ?level=read under
+   * --read-only). The server's approvals, MCP ledger and read ceiling apply; this file never calls /v1/ops to write.
+   */
+  async function remoteWrite(auth: BridgeAuth, action: string, input: unknown): Promise<ServerWrite> {
+    const args = { action, input };
+    const refusal = guardRemoteCall("lefine_write", args, { name: "lefine_write" }, options);
+    if (refusal) return { ok: false, needsApproval: false, text: refusal };
+    const msg: Message = { jsonrpc: "2.0", id: `local-${++writeId}`, method: "tools/call", params: { name: "lefine_write", arguments: args } };
+    const sent = await send(auth, msg, JSON.stringify(msg));
+    if (sent.kind === "net") return { ok: false, needsApproval: false, text: `Could not reach Lefine at ${auth.apiUrl}.` };
+    if (sent.status === 401) return { ok: false, needsApproval: false, text: KEY_REFUSED };
+    const parsed = sent.parsed as (Message & { error?: { message?: string } }) | null;
+    if (!parsed) return { ok: false, needsApproval: false, text: `Lefine answered HTTP ${sent.status} without a JSON-RPC message.` };
+    if (parsed.error) return { ok: false, needsApproval: false, text: parsed.error.message ?? "Lefine refused the write." };
+    const r = (parsed.result ?? {}) as { isError?: boolean; content?: Array<{ text?: unknown }>; structuredContent?: Record<string, unknown> };
+    const text = (r.content ?? []).map((c) => (typeof c.text === "string" ? c.text : "")).join("\n").trim();
+    const sc = r.structuredContent;
+    const needsApproval = sc?.status === "needs_approval" || sc?.needs_approval === true || /needs_approval/.test(text);
+    let data: unknown = sc && typeof sc === "object" && "data" in sc ? sc.data : sc;
+    if (data === undefined) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = undefined;
+      }
+    }
+    return { ok: !r.isError && !needsApproval && sent.status === 200, needsApproval, text, data };
+  }
+
   async function handle(line: string): Promise<void> {
     const text = line.trim();
     if (!text) return;
@@ -216,7 +252,7 @@ export function createBridge(deps: BridgeDeps) {
       const name = String(msg.params?.name ?? "");
       const args = (msg.params?.arguments ?? {}) as Record<string, unknown>;
       if (isLocalTool(name)) {
-        const out = await callLocal(name, args, { ops: createOpClient(auth.apiUrl, auth.token), cwd, roots: getRoots() }, options);
+        const out = await callLocal(name, args, { ops: createOpClient(auth.apiUrl, auth.token), cwd, roots: getRoots(), write: (action, input) => remoteWrite(auth, action, input) }, options);
         result(msg.id, out);
         return;
       }

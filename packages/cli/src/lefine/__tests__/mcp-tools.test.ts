@@ -23,6 +23,10 @@ function api() {
     const body = JSON.parse(String(init?.body ?? "{}"));
     if (url.endsWith("/v1/mcp")) {
       mcp.push(body);
+      if (body.params?.name === "lefine_write") {
+        created.push(body.params.arguments.input);
+        return Response.json({ jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: "done" }], structuredContent: { data: { id: "key_1" } } } });
+      }
       return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "lefine_find", inputSchema: {} }] } });
     }
     const op = url.split("/v1/ops/")[1];
@@ -32,10 +36,7 @@ function api() {
       const q = String(input2.search).toLowerCase();
       return Response.json({ ok: true, data: { items: KEYS.filter((k) => k.key.toLowerCase().includes(q) || k.translations.en.text.toLowerCase().includes(q)), nextCursor: null } });
     }
-    if (op === "strings.keys.create") {
-      created.push(input2);
-      return Response.json({ ok: true, data: { id: "key_1", ...input2 } });
-    }
+    if (op === "strings.keys.create") throw new Error("a local tool must not write through /v1/ops");
     return Response.json({ ok: false, error: { code: "NOT_FOUND", message: op } }, { status: 404 });
   }) as typeof globalThis.fetch;
   const out: Array<{ id?: unknown; result?: { tools?: Array<{ name: string }>; content?: Array<{ text: string }>; isError?: boolean } }> = [];

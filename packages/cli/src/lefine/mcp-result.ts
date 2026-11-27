@@ -8,8 +8,23 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+/** What the server answered to a write sent through its own MCP tool (lefine_write). */
+export interface ServerWrite {
+  /** True only when the server did the write. */
+  ok: boolean;
+  /** The server wants a person to approve first: nothing was written. `text` says where. */
+  needsApproval: boolean;
+  /** The server's own words (its text result), or why it could not be asked. */
+  text: string;
+  /** The action's output, when the server sent it as data. */
+  data?: unknown;
+}
+
 export interface LocalCtx {
+  /** READS only (list, preview). Every write goes through `write`: this file never calls a write action on /v1/ops. */
   ops: OpClient;
+  /** A write through the remote MCP (tools/call lefine_write), so the server's approvals, ledger and read ceiling apply. */
+  write: (action: string, input: unknown) => Promise<ServerWrite>;
   /** The folder the server was started in: relative paths mean relative to it. */
   cwd: string;
   /** Real paths files may be read from (mcp-paths.ts allowedRoots). */

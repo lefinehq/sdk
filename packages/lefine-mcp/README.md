@@ -52,9 +52,9 @@ Added here, answered on your machine:
 | Tool | What it does |
 |---|---|
 | `lefine_project` | Reads `lefine.ts` and `lefine.config.*` in the working folder (as text, never run) for the app and project ids, so the agent does not ask you. |
-| `lefine_upload_file` `{path, project?, alt?, folder?}` | One picture, mp4 or PDF to a Content project's media library. Answers `mediaId` and `url`. |
+| `lefine_upload_file` `{path, project?, alt?, folder?}` | One png, jpg, gif, webp, avif, mp4 or PDF (not svg) to a Content project's media library. Answers `mediaId` and `url`. |
 | `lefine_upload_folder` `{path, project?, pattern?, skip?}` | Up to 50 files per call, 4 at a time, as a table. `pattern` is a glob (`*` top level, `**/*.png` deep). `skip` takes the next batch. |
-| `lefine_import_locale_files` `{path, app?, format?, locale?, namespace?, dryRun?, confirmPlan?}` | JSON, YAML, Android XML, XLIFF, `.properties` and `.po` into a Strings app. First call is a dry run: counts and a `confirmPlan` code, nothing written. The second call (`dryRun: false` plus the code) imports exactly what was shown, or nothing if it changed. Imports are drafts. |
+| `lefine_import_locale_files` `{path, app?, format?, locale?, namespace?, dryRun?, confirmPlan?}` | `.json` `.arb` `.yaml` `.yml` `.xml` `.xlf` `.xliff` `.properties` `.po` files into a Strings app. First call is a dry run: counts and a plan id, nothing written. The second call (`dryRun: false`) is a normal Lefine write: the server may ask a person to approve it. `confirmPlan` is only the plan id (a stale one stops the import), not an approval. Imports are drafts. |
 | `lefine_find_similar_key`, `lefine_add_key` | For coding agents: find a key before adding one; add refuses duplicates and bad ICU. |
 
 `project` and `app` take a name, a slug or an id; an unclear name lists the candidates. Left out, they come from
@@ -79,13 +79,23 @@ MCP messages.
 
 ## Security
 
-- **Local files are read only inside the folder the server runs in**, plus each `--allow-dir`. `../`, absolute
-  paths elsewhere and symlinks that lead out are refused. `.git`, `.ssh`, `.aws`, `.lefine`, `.env*`,
-  `credentials*` and `node_modules` are never read, even inside an allowed folder.
-- **Uploads:** 8 MB, picture / mp4 / PDF only, and the first bytes must match the file name (a renamed `.env`
-  does not pass). The server checks type and size again.
-- **Imports are two-step.** The agent cannot write before a dry run, and the write is bound to the code that
-  dry run printed.
+What the local tools can read and write, exactly:
+
+- **Read: only inside the folder the server runs in**, plus each `--allow-dir`. `../`, absolute paths elsewhere and
+  symlinks that lead out are refused. In any letter case, `.git`, `.ssh`, `.aws`, `.gnupg`, `.kube`, `.docker`,
+  `.config`, `.lefine`, `node_modules`, `.env*`, `.git-credentials`, `.pgpass`, `.netrc`, `.npmrc`, `.pypirc`,
+  `.htpasswd`, `id_rsa*`, `id_ed25519*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, shell history and `credentials*` are never
+  read, even inside an allowed folder.
+- **No broad root.** If the server starts in `/`, your home directory or a parent of it (`/Users`, `/home`), the local
+  file tools are off (one line on stderr) until you pass `--allow-dir <project folder>`. `--allow-dir` itself is
+  refused for `/`, home, its parents, `~/.ssh`, `~/.aws` and the like.
+- **Which files:** uploads take png, jpg, gif, webp, avif, mp4 and PDF (not svg), 8 MB, and the first bytes must
+  match the name. Locale import takes only `.json .arb .yaml .yml .xml .xlf .xliff .properties .po`; `format`
+  chooses the parser and never widens what is read.
+- **Write: only through the server.** The local tools never call a write on the API themselves. Uploads, imports and
+  `lefine_add_key` are sent as the server's own `lefine_write` call, so the server's approvals (a person says yes in
+  Lefine), its MCP ledger and the `--read-only` ceiling apply. The dry run of an import stays local and writes
+  nothing. A plan id is not consent.
 - **The key stays on your machine.** It goes only to the server it was saved for and never appears in tool
   output. `lefine.ts` and `lefine.config.*` are read as text: a cloned repository cannot run code by starting
   this server. Text from your files is marked as data in answers; do not let an agent treat it as instructions.

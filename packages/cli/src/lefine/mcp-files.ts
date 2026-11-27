@@ -4,7 +4,8 @@
  *
  * Every read goes through mcp-paths.ts: inside the working folder (or --allow-dir), no links out, no key
  * folders, 8 MB, and a type from the name that the first bytes must agree with. The bytes then go to the
- * `content.media.upload` action as base64, which re-checks type and size on the server.
+ * `content.media.upload` action as base64, which re-checks type and size on the server. The upload is sent through
+ * the remote MCP (lefine_write), so the server's approvals, ledger and read ceiling apply to it like to any write.
  */
 
 import { lstatSync, readdirSync, statSync } from "node:fs";
@@ -44,7 +45,7 @@ async function uploadOne(ctx: LocalCtx, projectId: string, path: string, extra: 
   if (!contentType) throw new PathError("BAD_TYPE", `${filename}: only ${Object.keys(MEDIA_TYPES).join(" ")} files go to the media library.`);
   const { bytes } = readInside(path, ctx.roots, ctx.cwd, MAX_UPLOAD_BYTES);
   if (!sniffMatches(contentType, bytes)) throw new PathError("BAD_TYPE", `${filename}: the content is not ${contentType}, so it is not sent.`);
-  const data = await ctx.ops.callOp("content.media.upload", {
+  const sent = await ctx.write("content.media.upload", {
     projectId,
     filename,
     contentType,
@@ -52,7 +53,8 @@ async function uploadOne(ctx: LocalCtx, projectId: string, path: string, extra: 
     ...(extra.alt ? { alt: extra.alt } : {}),
     ...(extra.folder ? { folder: extra.folder } : {}),
   });
-  return { ...checkUploaded(data), filename };
+  if (!sent.ok) throw new Error(sent.needsApproval ? `${filename}: not uploaded, a person must approve it in Lefine first. ${sent.text}` : sent.text);
+  return { ...checkUploaded(sent.data), filename };
 }
 
 export async function uploadFile(ctx: LocalCtx, args: ToolArgs): Promise<ToolResult> {

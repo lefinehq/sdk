@@ -3,10 +3,14 @@
  * .properties, gettext .po) into a Strings app. Two calls, on purpose:
  *
  *   1. dryRun (the default): every file is previewed by the server and nothing is written. The answer
- *      holds the counts and a `confirmPlan` code that names exactly the previews it showed.
- *   2. dryRun: false with that confirmPlan: the previews are made again; if they are not the ones shown,
- *      nothing is written. Each namespace is then applied with the digest of a fresh preview, source
- *      language first, and it stops at the first one that does not finish cleanly.
+ *      holds the counts and a `plan` id that names exactly the previews it showed.
+ *   2. dryRun: false: each namespace is applied with the digest of a fresh preview, source language first, as a
+ *      normal server write (lefine_write strings.import.apply through the remote MCP). The server decides: its
+ *      approvals ask the person, its ledger records the write, a read-only key is refused. It stops at the first
+ *      namespace that does not finish cleanly. `confirmPlan` is NOT consent (a model can pass any string); it is
+ *      only the plan id: when given and stale, nothing is written.
+ *
+ * Reads are limited to locale file extensions (EXT_FORMAT): `format` picks the parser, it never widens what is read.
  *
  * The parsing of JSON, YAML, XML, XLIFF and .properties is the server's (strings.import.preview). The .po
  * file is read here with the reader `lefine import` already uses, then sent as JSON.
@@ -22,12 +26,13 @@ import { type LocalCtx, type ToolArgs, type ToolResult, cell, errResult, okResul
 import { safeText } from "./safe-text.js";
 import { canonicalLocale, samePlan } from "./strings-commands.js";
 import { isLocaleName, readExport } from "./tms-import.js";
-import type { ImportFileInput, ImportPreview, RunOutput } from "./types.js";
+import type { ImportFileInput, ImportPreview } from "./types.js";
 
 export const FORMATS = ["json", "yaml", "xml", "xliff", "properties", "po"] as const;
 export type Format = (typeof FORMATS)[number];
 
-const EXT_FORMAT: Record<string, Format> = { ".json": "json", ".yaml": "yaml", ".yml": "yaml", ".xml": "xml", ".xlf": "xliff", ".xliff": "xliff", ".properties": "properties", ".po": "po" };
+/** The ONLY file types this tool reads (.arb is JSON). `format` never adds one. */
+export const EXT_FORMAT: Record<string, Format> = { ".json": "json", ".arb": "json", ".yaml": "yaml", ".yml": "yaml", ".xml": "xml", ".xlf": "xliff", ".xliff": "xliff", ".properties": "properties", ".po": "po" };
 const MAX_FILES = 200;
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 20 * 1024 * 1024;
@@ -60,11 +65,13 @@ function collect(ctx: LocalCtx, path: string, format: Format | undefined): Colle
   const out: Collected = { files: [], skipped: [] };
   let total = 0;
   const take = (full: string, rel: string) => {
-    const f = format ?? EXT_FORMAT[extname(full).toLowerCase()];
-    if (!f) {
-      out.skipped.push(`${rel}: not a locale file type`);
+    // The extension decides whether the file is read at all; `format` only chooses how it is parsed.
+    const byExt = EXT_FORMAT[extname(full).toLowerCase()];
+    if (!byExt) {
+      out.skipped.push(`${rel}: not a locale file type (${Object.keys(EXT_FORMAT).join(" ")})`);
       return;
     }
+    const f = format ?? byExt;
     if (out.files.length >= MAX_FILES) throw new Error(`More than ${MAX_FILES} files in ${safeText(path)}. Import one folder at a time.`);
     const { bytes } = readInside(full, ctx.roots, ctx.cwd, MAX_FILE_BYTES);
     total += bytes.length;
@@ -72,6 +79,7 @@ function collect(ctx: LocalCtx, path: string, format: Format | undefined): Colle
     out.files.push({ rel, format: f, text: bytes.toString("utf-8") });
   };
   if (statSync(real).isFile()) {
+    if (!EXT_FORMAT[extname(real).toLowerCase()]) throw new Error(`${basename(real)} is not a locale file. Only ${Object.keys(EXT_FORMAT).join(" ")} files are read.`);
     take(real, basename(real));
     return out;
   }
@@ -215,12 +223,13 @@ export async function importLocaleFiles(ctx: LocalCtx, args: ToolArgs): Promise<
     if (dryRun) {
       const nothing = total.created + total.updated === 0;
       return okResult(
-        `Dry run for ${safeText(app.name ?? app.id)}: ${total.created} new, ${total.updated} changed, ${total.skipped} same. Nothing was written.\n\n${table}\n\n${notes.join(" ")}\n\n${nothing ? "Nothing to import." : `To import this exactly, call again with dryRun: false and confirmPlan: "${code}".`}`,
-        { ...shown, dryRun: true, confirmPlan: code },
+        `Dry run for ${safeText(app.name ?? app.id)}: ${total.created} new, ${total.updated} changed, ${total.skipped} same. Nothing was written.\n\n${table}\n\n${notes.join(" ")}\n\n${nothing ? "Nothing to import." : `To import, call again with dryRun: false. The server may ask a person to approve it in Lefine first.`}`,
+        { ...shown, dryRun: true },
       );
     }
-    if (strArg(args, "confirmPlan") !== code) {
-      return errResult(`Nothing was written. confirmPlan ${strArg(args, "confirmPlan") ? "does not match what the files would do now" : "is missing"}. Run the dry run, show the person its counts, then pass its confirmPlan "${code}" with dryRun: false.`);
+    const given = strArg(args, "confirmPlan");
+    if (given && given !== code) {
+      return errResult(`Nothing was written. The plan id "${given}" is not what the files would do now ("${code}"). Run the dry run again and look at its counts.`);
     }
     // Each apply moves the app's marker, so the digests of later previews go stale: preview again before each apply
     // and apply only what is still the plan shown.
@@ -231,9 +240,14 @@ export async function importLocaleFiles(ctx: LocalCtx, args: ToolArgs): Promise<
       if (!samePlan(p.preview, fresh)) {
         return errResult(`"${safeText(p.input.namespace)}" (${p.input.locale}) changed in Lefine while importing, so it was not applied. ${applied} namespace(s) before it were imported. Run the dry run again.`);
       }
-      const { run } = await ctx.ops.callOp<RunOutput>("strings.import.apply", { ...p.input, digest: fresh.digest });
-      if (run.status !== "succeeded") {
-        return errResult(`Imported ${applied} namespace(s), then "${safeText(p.input.namespace)}" (${p.input.locale}) did not finish cleanly (${safeText(run.status)}). ${previews.length - i - 1} more were not tried. Check the app in Lefine.`);
+      const sent = await ctx.write("strings.import.apply", { ...p.input, digest: fresh.digest });
+      if (sent.needsApproval) {
+        return errResult(`Imported ${applied} namespace(s). "${safeText(p.input.namespace)}" (${p.input.locale}) needs a person's approval in Lefine first, so it and ${previews.length - i - 1} more were not written. ${safeText(sent.text)} After it is approved, run the import again.`);
+      }
+      if (!sent.ok) return errResult(`Imported ${applied} namespace(s), then "${safeText(p.input.namespace)}" (${p.input.locale}) was refused: ${safeText(sent.text)} ${previews.length - i - 1} more were not tried.`);
+      const run = (sent.data as { run?: { status?: unknown } } | undefined)?.run;
+      if (run?.status !== "succeeded") {
+        return errResult(`Imported ${applied} namespace(s), then "${safeText(p.input.namespace)}" (${p.input.locale}) did not finish cleanly (${safeText(String(run?.status ?? "no status"))}). ${previews.length - i - 1} more were not tried. Check the app in Lefine.`);
       }
       applied++;
     }

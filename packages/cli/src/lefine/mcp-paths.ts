@@ -12,7 +12,8 @@
  */
 
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { homedir } from "node:os";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export type PathErrorCode = "NOT_FOUND" | "OUTSIDE" | "SYMLINK" | "DENIED" | "NOT_FILE" | "TOO_BIG" | "BAD_TYPE" | "BAD_PATH";
 
@@ -26,9 +27,14 @@ export class PathError extends Error {
   }
 }
 
-/** Folders that hold keys and history, never content. Refused even inside an allowed folder. */
+/** Folders that hold keys and history, never content. Refused even inside an allowed folder. Compared in lower case. */
 const DENIED_SEGMENTS = new Set([".git", ".ssh", ".aws", ".gnupg", ".lefine", ".config", ".kube", ".docker", "node_modules"]);
-const DENIED_NAME = /^(\.env(\..*)?|\.npmrc|\.netrc|id_(rsa|ed25519|ecdsa|dsa)(\.pub)?|credentials(\.json)?)$/i;
+/** Files that hold secrets, by name, any case: .env*, key and certificate files, credential stores, shell history. */
+const DENIED_NAME =
+  /^(\.env.*|\.git-credentials|\.pgpass|\.netrc|\.npmrc|\.pypirc|\.htpasswd|id_(rsa|ed25519|ecdsa|dsa).*|credentials(\.json)?|\.[a-z0-9]*_history|.*\.(pem|key|p12|pfx))$/i;
+
+/** The real path with the case the disk has (realpath.native): `.SSH` on a case-insensitive disk is `.ssh`. */
+const onDisk = (p: string): string => realpathSync.native(p);
 
 /** True when `child` is `root` or below it. Compares path segments, so /a/bc is not inside /a/b. */
 export function isInside(root: string, child: string): boolean {
@@ -36,25 +42,72 @@ export function isInside(root: string, child: string): boolean {
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
-/** The folders files may be read from, as real paths: the working folder first, then each --allow-dir. */
-export function allowedRoots(cwd: string, allowDirs: string[] = []): string[] {
+const lower = (p: string) => p.toLowerCase();
+
+export interface RootOptions {
+  /** The home directory (test seam). Default: the account's. */
+  home?: string;
+  /** Called with one line when a root is left out. */
+  warn?: (line: string) => void;
+}
+
+/** Folders in the home directory that are never a root, nor above one. */
+const homeDenied = (home: string): string[] => [".ssh", ".aws", ".gnupg", ".lefine", ".config", ".kube", ".docker", ".git-credentials", ".netrc", ".npmrc", ".pgpass", ".pypirc"].map((n) => join(home, n));
+
+/**
+ * Why `root` may not be served, or null. It is judged as a whole, not only the part below it: `/`, the home
+ * directory and its parents (/Users, /home) hold everything, and a denied folder (~/.ssh) or one inside it is no
+ * place for a root either.
+ */
+export function rootProblem(root: string, home: string): string | null {
+  const r = lower(root);
+  const h = lower(home);
+  if (r === lower(resolve("/")) || isInside(r, h)) return r === h ? "it is your home directory" : "it holds your home directory";
+  if (homeDenied(h).some((d) => isInside(d, r) || isInside(r, d))) return "it is or contains a folder of keys or settings (~/.ssh, ~/.aws, ...)";
+  const parts = r.split(sep).filter(Boolean);
+  if (parts.some((p) => DENIED_SEGMENTS.has(p) && p !== ".config" && p !== "node_modules")) return "it is inside a folder of keys or history";
+  if (DENIED_NAME.test(parts[parts.length - 1] ?? "")) return "it is named like a secrets file";
+  return null;
+}
+
+/**
+ * The folders files may be read from, as real paths: the working folder first, then each --allow-dir.
+ * The working folder is left out (with a warning) when it is /, the home directory or a parent of it; an
+ * --allow-dir that broad, or a denied folder, throws. With no root left, local file tools read nothing.
+ */
+export function allowedRoots(cwd: string, allowDirs: string[] = [], opts: RootOptions = {}): string[] {
+  const home = (() => {
+    try {
+      return onDisk(opts.home ?? homedir());
+    } catch {
+      return opts.home ?? homedir();
+    }
+  })();
   const roots: string[] = [];
-  for (const dir of [cwd, ...allowDirs]) {
+  const add = (dir: string, explicit: boolean) => {
     let real: string;
     try {
-      real = realpathSync(resolve(cwd, dir));
+      real = onDisk(resolve(cwd, dir));
     } catch {
       throw new PathError("NOT_FOUND", `--allow-dir ${dir} does not exist.`);
     }
+    const bad = rootProblem(real, home);
+    if (bad) {
+      if (explicit) throw new PathError("DENIED", `--allow-dir ${dir} is refused: ${bad}. Name a project folder.`);
+      opts.warn?.(`lefine-mcp: local file tools are off: the folder this server runs in (${real}) is refused, ${bad}. Start it in a project folder, or pass --allow-dir <project folder>.`);
+      return;
+    }
     if (!roots.includes(real)) roots.push(real);
-  }
+  };
+  add(cwd, false);
+  for (const dir of allowDirs) add(dir, true);
   return roots;
 }
 
 /** Judged on the part below the allowed folder: a project that lives under ~/.config is still a project. */
 function denied(below: string): string | null {
   const parts = below.split(sep).filter(Boolean);
-  const hit = parts.find((p) => DENIED_SEGMENTS.has(p));
+  const hit = parts.find((p) => DENIED_SEGMENTS.has(lower(p)));
   if (hit) return hit;
   const last = parts[parts.length - 1] ?? "";
   return DENIED_NAME.test(last) ? last : null;
@@ -64,10 +117,11 @@ function denied(below: string): string | null {
 export function resolveInside(input: string, roots: string[], cwd: string): string {
   if (typeof input !== "string" || input.trim() === "" || input.includes("\0")) throw new PathError("BAD_PATH", "The path is empty or not a path.");
   const abs = resolve(cwd, input);
+  if (roots.length === 0) throw new PathError("OUTSIDE", "Local file tools are off: no folder is allowed. Start the server in a project folder, or pass --allow-dir <project folder>.");
   let real: string;
   try {
     lstatSync(abs);
-    real = realpathSync(abs);
+    real = onDisk(abs);
   } catch {
     throw new PathError("NOT_FOUND", `Not found: ${input}.`);
   }
@@ -118,7 +172,6 @@ export const MEDIA_TYPES: Record<string, string> = {
   ".gif": "image/gif",
   ".webp": "image/webp",
   ".avif": "image/avif",
-  ".svg": "image/svg+xml",
   ".mp4": "video/mp4",
   ".pdf": "application/pdf",
 };
@@ -147,8 +200,6 @@ export function sniffMatches(contentType: string, bytes: Buffer): boolean {
       return bytes.subarray(4, 8).toString("latin1") === "ftyp";
     case "application/pdf":
       return bytes.subarray(0, 1024).toString("latin1").includes("%PDF-");
-    case "image/svg+xml":
-      return /<svg[\s>]/i.test(bytes.subarray(0, 4096).toString("utf-8"));
     default:
       return false;
   }

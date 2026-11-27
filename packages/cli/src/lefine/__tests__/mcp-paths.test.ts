@@ -103,8 +103,7 @@ describe("types", () => {
     expect(sniffMatches("image/jpeg", Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0]))).toBe(true);
     expect(sniffMatches("application/pdf", Buffer.from("%PDF-1.7\n"))).toBe(true);
     expect(sniffMatches("application/pdf", PNG)).toBe(false);
-    expect(sniffMatches("image/svg+xml", Buffer.from('<?xml version="1.0"?><svg xmlns="x"></svg>'))).toBe(true);
-    expect(sniffMatches("image/svg+xml", Buffer.from("<html></html>"))).toBe(false);
+    expect(sniffMatches("image/svg+xml", Buffer.from('<?xml version="1.0"?><svg xmlns="x"></svg>'))).toBe(false); // svg is refused by the server, so not sent
     expect(sniffMatches("video/mp4", Buffer.concat([Buffer.alloc(4), Buffer.from("ftypisom")]))).toBe(true);
     expect(sniffMatches("text/plain", Buffer.from("x"))).toBe(false);
   });
