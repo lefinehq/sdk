@@ -4,7 +4,7 @@
  * working exactly as before for existing Better users.
  */
 
-import { program, type Command } from "commander";
+import { Option, program, type Command } from "commander";
 import { readFileSync } from "node:fs";
 import { loginCommand, logoutCommand, whoamiCommand } from "./lefine/auth-commands.js";
 import { resolveLefineAuth } from "./lefine/credentials.js";
@@ -16,6 +16,8 @@ import { contentTypesCommand } from "./lefine/content-types.js";
 import { contentPushCommand } from "./lefine/content-push.js";
 import { initCommand } from "./lefine/init-command.js";
 import { runBridge } from "./lefine/mcp-bridge.js";
+import { MCP_ABOUT, resolveMcpOptions } from "./lefine/mcp-config.js";
+import { allowedRoots } from "./lefine/mcp-paths.js";
 import { migrateCommand } from "./lefine/migrate.js";
 import { MCP_HINT, setupCommand, type SetupOptions } from "./lefine/setup-command.js";
 
@@ -326,17 +328,36 @@ const mcp = program
 
 addSetupOptions(mcp.command("install").description("Same as `lefine setup`"));
 
-mcp.action(async () => {
+mcp
+  .option("--read-only", "Only reading tools (also asks the server for a read ceiling)")
+  .addOption(new Option("--readonly", "Same as --read-only").hideHelp())
+  .option("--toolsets <list>", "Only these modules, comma separated (strings, content, studio, social, sites, brain, integrations)")
+  .option("--allow-dir <dir...>", "A folder besides the working folder that local tools may read (repeatable)")
+  .option("--tools-ttl <seconds>", "How long the server's tool list is kept (default 300)")
+  .addHelpText("after", `\n${MCP_ABOUT}\n`);
+
+mcp.action(async (flags: { readOnly?: boolean; readonly?: boolean; toolsets?: string; allowDir?: string[]; toolsTtl?: string }) => {
+  let options: ReturnType<typeof resolveMcpOptions>;
+  try {
+    options = resolveMcpOptions(flags);
+    allowedRoots(process.cwd(), options.allowDirs);
+  } catch (err) {
+    process.stderr.write(`lefine mcp: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.exit(2);
+  }
   const found = resolveLefineAuth({});
   // Run by hand, the server waits for an app on stdin and looks stuck: say what it is, on stderr (stdout is MCP only).
   if (process.stdin.isTTY) process.stderr.write(`${MCP_HINT}\n`);
-  if (!found) process.stderr.write("lefine mcp: not signed in. Run `npx lefine login` or set LEFINE_TOKEN.\n");
+  if (!found) process.stderr.write("lefine mcp: not signed in. Run `npx @lefine/mcp setup` or set LEFINE_TOKEN.\n");
+  const mode = [options.readOnly ? "read-only" : "", options.toolsets ? `toolsets ${[...options.toolsets].join(",")}` : ""].filter(Boolean).join(", ");
+  process.stderr.write(`lefine mcp ${pkg.version}${mode ? ` (${mode})` : ""}\n`);
   await runBridge(process.stdin, {
     auth: found ? { token: found.token, apiUrl: found.apiUrl } : null,
     fetch,
     write: (line) => process.stdout.write(`${line}\n`),
     log: (line) => process.stderr.write(`${line}\n`),
     clientVersion: pkg.version,
+    options,
   });
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { LOCAL_TOOLS } from "../mcp-tools.js";
-import { createBridge, runBridge } from "../mcp-bridge.js";
+import { localToolDefs } from "../mcp-local.js";
+import { DEFAULT_OPTIONS } from "../mcp-config.js";
+import { KEY_REFUSED, createBridge, runBridge } from "../mcp-bridge.js";
 
 type Sent = { url: string; headers: Record<string, string>; body: unknown };
 
@@ -36,8 +37,8 @@ describe("lefine-mcp bridge", () => {
     expect(sent[1]!.headers["mcp-protocol-version"]).toBe("2025-06-18");
     expect(out).toEqual([
       { jsonrpc: "2.0", id: 1, result: { protocolVersion: "2025-06-18" } },
-      // The bridge adds its two local tools to the server's list (mcp-tools.ts).
-      { jsonrpc: "2.0", id: 2, result: { tools: [...LOCAL_TOOLS] } },
+      // The bridge adds its local tools to the server's list (mcp-local.ts).
+      { jsonrpc: "2.0", id: 2, result: { tools: [...localToolDefs(DEFAULT_OPTIONS)] } },
     ]);
   });
 
@@ -59,16 +60,23 @@ describe("lefine-mcp bridge", () => {
     const { bridge, sent, out } = setup(() => ok(1, {}), null);
     await bridge.handle(JSON.stringify({ jsonrpc: "2.0", id: 9, method: "tools/list" }));
     expect(sent.length).toBe(0);
-    expect((out[0] as { error: { message: string } }).error.message).toContain("npx lefine login");
+    expect((out[0] as { error: { message: string } }).error.message).toContain("npx @lefine/mcp setup");
   });
 
-  test("the server's error body is passed through; a refused key is also said on stderr", async () => {
+  test("a 401 becomes one clear sentence on the client's id, and is said on stderr", async () => {
     const err = { jsonrpc: "2.0", id: null, error: { code: -32001, message: "Add your Lefine access key" } };
     const { bridge, out, logs } = setup(() => ({ status: 401, body: err }));
     await bridge.handle(JSON.stringify({ jsonrpc: "2.0", id: 4, method: "tools/list" }));
-    // The server could not read the id before refusing; the client gets it back on its own id.
-    expect(out).toEqual([{ ...err, id: 4 }]);
+    expect(out).toEqual([{ jsonrpc: "2.0", id: 4, error: { code: -32001, message: KEY_REFUSED } }]);
+    expect(KEY_REFUSED).toContain("npx @lefine/mcp setup");
     expect(logs[0]).toContain("refused");
+  });
+
+  test("another error body from the server is passed through on the client's id", async () => {
+    const err = { jsonrpc: "2.0", id: null, error: { code: -32602, message: "bad params" } };
+    const { bridge, out } = setup(() => ({ status: 400, body: err }));
+    await bridge.handle(JSON.stringify({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "lefine_read" } }));
+    expect(out).toEqual([{ ...err, id: 8 }]);
   });
 
   test("a network failure or a non-JSON answer becomes a JSON-RPC error for that id", async () => {

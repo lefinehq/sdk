@@ -51,10 +51,10 @@ function api() {
 }
 
 describe("lefine mcp: find_similar_key and add_key (audit, idea C)", () => {
-  it("tools/list has the server's tools and the two local ones", async () => {
+  it("tools/list has the server's tools and the local ones", async () => {
     const { bridge, out } = api();
     await bridge.handle(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }));
-    expect(out[0]?.result?.tools?.map((t) => t.name)).toEqual(["lefine_find", "lefine_find_similar_key", "lefine_add_key"]);
+    expect(out[0]?.result?.tools?.map((t) => t.name)).toEqual(["lefine_find", "lefine_project", "lefine_upload_file", "lefine_upload_folder", "lefine_import_locale_files", "lefine_find_similar_key", "lefine_add_key"]);
   });
 
   it("find_similar_key finds the same text with other words around it, closest first", async () => {
