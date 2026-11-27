@@ -1,5 +1,17 @@
 # @lefine/mcp
 
+## 1.0.0-rc.0
+
+### Major Changes
+
+- A real MCP server package, not just an entry point. Started by an AI app (stdin is not a terminal) it passes Lefine's remote tools through from `https://dash.lefine.ai/v1/mcp` with your sign-in (saved login or `LEFINE_TOKEN`): the tool list comes from the server (all pages), is kept for 5 minutes (`--tools-ttl`) and is served from the last read when the server cannot be reached. A 401 now says one sentence: run `npx @lefine/mcp setup`.
+- Local tools for what only your machine can do: `lefine_project` (app and project ids from `lefine.ts` / `lefine.config.*`, read as text), `lefine_upload_file`, `lefine_upload_folder` (up to 50 per call, a table), `lefine_import_locale_files` (JSON, YAML, XML, XLIFF, .properties, .po; a dry run first, then an apply bound to the dry run's `confirmPlan`). `lefine_find_similar_key` and `lefine_add_key` stay.
+- `--read-only` hides every write tool and asks the server for `?level=read`; `--toolsets=content,strings` limits modules; `--allow-dir` opens one more folder to local tools. Environment variables for each.
+- Local files are read only inside the working folder (and `--allow-dir`): no `../`, no links out, no `.git` / `.ssh` / `.lefine` / `.env`, 8 MB, a type allowlist checked against the first bytes.
+- README rewritten. Releasing this version goes to the `next` npm tag, so `npx @lefine/mcp` stays on 0.3.0 until it is promoted.
+- Updated dependencies
+  - lefine@0.11.0
+
 ## 0.3.0
 
 ### Minor Changes

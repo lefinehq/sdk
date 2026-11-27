@@ -27,4 +27,13 @@ describe("npx @lefine/mcp routing", () => {
   it("other arguments (--version, --help) keep going to the server as before", () => {
     expect(routeArgs(["--version"], tty)).toEqual(["mcp", "--version"]);
   });
+  it("the server's own flags go to the server, in a terminal or not", () => {
+    expect(routeArgs(["--read-only"], client)).toEqual(["mcp", "--read-only"]);
+    expect(routeArgs(["--toolsets=content,strings"], client)).toEqual(["mcp", "--toolsets=content,strings"]);
+    expect(routeArgs(["--allow-dir", "/tmp/x"], tty)).toEqual(["mcp", "--allow-dir", "/tmp/x"]);
+    expect(routeArgs(["--tools-ttl", "0"], tty)).toEqual(["mcp", "--tools-ttl", "0"]);
+  });
+  it("--readonly (one word) is the setup flag, --read-only (two words) is the server flag", () => {
+    expect(routeArgs(["--readonly"], client)).toEqual(["setup", "--readonly"]);
+  });
 });

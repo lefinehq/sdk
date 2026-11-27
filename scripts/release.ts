@@ -110,6 +110,11 @@ export interface Packed {
   result: "published" | "dry-run" | "failed";
 }
 
+/** A prerelease (1.0.0-rc.0) goes to the `next` tag: npm refuses one without --tag, and `latest` must stay what `npx` installs. */
+export function distTag(version: string): string[] {
+  return version.includes("-") ? ["--tag", "next"] : [];
+}
+
 /** The `sha256sum -c` format: `<hex>  <file>`. */
 export function sha256sums(packed: Packed[]): string {
   return packed.map((p) => `${p.sha256}  ${p.tarball}\n`).join("");
@@ -170,7 +175,7 @@ async function main(): Promise<void> {
     const record: Packed = { name: p.name, version: p.version, tarball: basename(tarball), ...digests(tarball), result: "failed" };
     records.push(record);
     console.log(`packed   ${id} sha256:${record.sha256}`);
-    const publish = spawnSync("npm", ["publish", tarball, "--access", "public", ...(DRY ? ["--dry-run"] : [])], { stdio: "inherit" });
+    const publish = spawnSync("npm", ["publish", tarball, "--access", "public", ...distTag(p.version), ...(DRY ? ["--dry-run"] : [])], { stdio: "inherit" });
     if (DRY) {
       console.log(publish.status === 0 ? `dry-run  ${id}` : `FAILED   ${id} (dry run)`);
       if (publish.status === 0) record.result = "dry-run";

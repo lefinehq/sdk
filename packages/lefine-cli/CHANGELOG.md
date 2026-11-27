@@ -1,5 +1,11 @@
 # @lefine/cli
 
+## 0.12.0
+
+### Minor Changes
+
+- Same source as `lefine` 0.11.0: `lefine mcp` is a full MCP server with local tools (`lefine_project`, `lefine_upload_file`, `lefine_upload_folder`, `lefine_import_locale_files`), `--read-only`, `--toolsets`, `--allow-dir`, `--tools-ttl`, a cached tool list and a clear 401 message.
+
 ## 0.11.0
 
 ### Minor Changes

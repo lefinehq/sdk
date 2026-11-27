@@ -1,5 +1,13 @@
 # lefine
 
+## 0.11.0
+
+### Minor Changes
+
+- `lefine mcp` is a full MCP server. It passes Lefine's remote tools through with a cached tool list (ttl, `--tools-ttl`, served stale when the server is down), turns a 401 into "run `npx @lefine/mcp setup`", and adds local tools: `lefine_project`, `lefine_upload_file`, `lefine_upload_folder`, `lefine_import_locale_files` next to `lefine_find_similar_key` and `lefine_add_key`.
+- New flags `--read-only` (also asks the server for `?level=read`), `--toolsets <list>`, `--allow-dir <dir>`, `--tools-ttl <seconds>`, each with an environment variable (`LEFINE_MCP_READ_ONLY`, `LEFINE_MCP_TOOLSETS`, `LEFINE_MCP_ALLOW_DIRS`, `LEFINE_MCP_TOOLS_TTL`).
+- Local tools read files only inside the working folder and `--allow-dir` (real paths, no links out, no key folders, 8 MB, type checked against the first bytes). `lefine.ts` and `lefine.config.*` are read as text, never run.
+
 ## 0.10.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@lefine/mcp",
-  "version": "0.3.0",
+  "version": "1.0.0-rc.0",
   "description": "Set up Lefine in your AI apps with one command (npx @lefine/mcp), and the stdio server an app starts",
   "license": "MIT",
   "type": "module",

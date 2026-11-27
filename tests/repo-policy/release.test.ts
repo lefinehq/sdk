@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { digests, privateDeps, promisedFiles, publishOrder, readPackages, sha256sums } from "../../scripts/release.ts";
+import { digests, distTag, privateDeps, promisedFiles, publishOrder, readPackages, sha256sums } from "../../scripts/release.ts";
 
 const REPO = resolve(__dirname, "../..");
 
@@ -59,6 +59,13 @@ describe("scripts/release.ts", () => {
       const repo = (p as { repository?: { url?: string } }).repository;
       expect(repo?.url, p.name).toBe("git+https://github.com/lefinehq/sdk.git");
     }
+  });
+});
+
+describe("scripts/release.ts: prereleases", () => {
+  it("a prerelease is published under the next tag, a release under no tag (latest)", () => {
+    expect(distTag("1.0.0-rc.0")).toEqual(["--tag", "next"]);
+    expect(distTag("0.11.0")).toEqual([]);
   });
 });
 
