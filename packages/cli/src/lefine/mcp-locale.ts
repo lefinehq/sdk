@@ -176,6 +176,15 @@ export function planCode(items: Array<{ input: ImportFileInput; preview: ImportP
     .slice(0, 16);
 }
 
+/** What state the imported texts are in: the server saves the source language approved and any other language as reviewed (strings/imports.ts). */
+export function savedAs(locales: string[], sourceLocale: string): string {
+  const isSource = (l: string) => canonicalLocale(l).toLowerCase() === canonicalLocale(sourceLocale).toLowerCase();
+  const source = locales.some(isSource);
+  const other = locales.some((l) => !isSource(l));
+  if (source && other) return `Source-language texts (${sourceLocale}) are saved as approved; the other languages are saved as reviewed, not approved.`;
+  return source ? `Source-language texts (${sourceLocale}) are saved as approved.` : "These texts are saved as reviewed, not approved.";
+}
+
 export async function importLocaleFiles(ctx: LocalCtx, args: ToolArgs): Promise<ToolResult> {
   const path = strArg(args, "path");
   if (!path) return errResult("path is needed: a locale file or a folder of them.");
@@ -251,7 +260,7 @@ export async function importLocaleFiles(ctx: LocalCtx, args: ToolArgs): Promise<
       }
       applied++;
     }
-    return okResult(`Imported ${total.created} new and ${total.updated} changed text(s) in ${applied} namespace(s) of ${safeText(app.name ?? app.id)}. They are drafts for review; nothing is live until a publish.`, { ...shown, dryRun: false, applied });
+    return okResult(`Imported ${total.created} new and ${total.updated} changed text(s) in ${applied} namespace(s) of ${safeText(app.name ?? app.id)}. ${savedAs(previews.map((p) => p.input.locale), app.sourceLocale)} Nothing is live until a publish.`, { ...shown, dryRun: false, applied });
   } catch (err) {
     return errResult(safeText(err instanceof LefineError ? `${err.code}: ${err.message}` : err instanceof Error ? err.message : "The import failed."));
   }

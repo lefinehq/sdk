@@ -107,7 +107,7 @@ const TOOLS: LocalTool[] = [
       description:
         "Push local translation files (JSON, YAML, Android XML, XLIFF, .properties, .po) into a Strings app, in two steps. " +
         "FIRST call with dryRun left out: nothing is written; you get counts per file and a plan id. Show the person the counts. " +
-        "THEN call again with dryRun: false: it is a normal Lefine write, so the server may ask a person to approve it first (then it says where). Imported texts are drafts; a publish is separate. Only locale file types are read (.json .arb .yaml .yml .xml .xlf .xliff .properties .po). " +
+        "THEN call again with dryRun: false: it is a normal Lefine write, so the server may ask a person to approve it first (then it says where). Source-language texts are saved approved and other languages as reviewed; a publish is separate. Only locale file types are read (.json .arb .yaml .yml .xml .xlf .xliff .properties .po). " +
         "Files: de.json = { namespace: { key: text } }, or de/common.yaml, or common.yaml (source language; pass locale for another).",
       inputSchema: {
         type: "object",

@@ -8,7 +8,7 @@ import { callLocal } from "../mcp-local.js";
 import { DEFAULT_OPTIONS } from "../mcp-config.js";
 import { allowedRoots } from "../mcp-paths.js";
 import { readProjectInfo } from "../mcp-project.js";
-import { planCode, planFiles } from "../mcp-locale.js";
+import { planCode, planFiles, savedAs } from "../mcp-locale.js";
 import type { LocalCtx } from "../mcp-result.js";
 
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(24)]);
@@ -195,6 +195,12 @@ describe("lefine_project", () => {
 });
 
 describe("lefine_import_locale_files", () => {
+  test("savedAs says what the server does: source approved, other languages reviewed", () => {
+    expect(savedAs(["en"], "en")).toBe("Source-language texts (en) are saved as approved.");
+    expect(savedAs(["de"], "en")).toBe("These texts are saved as reviewed, not approved.");
+    expect(savedAs(["en", "de"], "en")).toContain("the other languages are saved as reviewed");
+  });
+
   const preview = (created = 2, updated = 1) => ({ digest: "a".repeat(64), source: 3, tally: { created, updated, skipped: 0, dropped: 0 }, dropped: [], newNamespace: false, alreadyImported: null, changes: { locales: [{ locale: "en", added: created, edited: updated, removed: 0, items: [], truncated: false }] } });
   const run = (status = "succeeded") => ({ run: { id: "run_1", status, steps: [], counts: { source: 0, pushed: 0, live: null }, tally: { created: 0, updated: 0, skipped: 0, dropped: 0 } }, replayed: false });
 
@@ -249,6 +255,8 @@ describe("lefine_import_locale_files", () => {
     const done = await callLocal("lefine_import_locale_files", { path: ".", app: "web", dryRun: false, confirmPlan: code }, c, DEFAULT_OPTIONS);
     expect(done!.isError).toBeUndefined();
     expect(done!.structuredContent).toMatchObject({ dryRun: false, applied: 1 });
+    expect(JSON.stringify(done!.content)).not.toContain("drafts for review");
+    expect(JSON.stringify(done!.content)).toContain("saved as approved");
     const applied = calls.find((x) => x.name === "strings.import.apply")!;
     expect(applied.input).toMatchObject({ appId: "app_web123", locale: "en", namespace: "nav", digest: "a".repeat(64) });
   });
