@@ -1,5 +1,13 @@
 # @lefine/mcp
 
+## 1.0.0-rc.1
+
+### Patch Changes
+
+- Fixes rc.0, which was packed with a stale lockfile and asked for `lefine ^0.10.0` (no `--read-only`, `--toolsets`, `--allow-dir` or local tools). This version depends on `lefine ^0.11.0`, and the release script now refuses a tarball whose `workspace:` ranges are not the workspace's current versions.
+- `npx @lefine/mcp --version` prints this package's version, and `--help` says `lefine-mcp`, with the server flags and environment variables listed.
+- README: says plainly that a connected AI app asks a person before it publishes, and an API key (`LEFINE_TOKEN`) publishes right away unless Agent approvals is on in Lefine settings (off by default).
+
 ## 1.0.0-rc.0
 
 ### Major Changes

@@ -8,7 +8,15 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { metaOutput } from "./meta.js";
 import { routeArgs } from "./route.js";
+
+const own = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
+const meta = metaOutput(process.argv.slice(2), own.version);
+if (meta !== null) {
+  process.stdout.write(meta);
+  process.exit(0);
+}
 
 const manifest = createRequire(import.meta.url).resolve("lefine/package.json");
 const { bin } = JSON.parse(readFileSync(manifest, "utf-8"));

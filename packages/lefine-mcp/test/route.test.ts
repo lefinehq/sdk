@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { HELP, metaOutput } from "../bin/meta.js";
 import { routeArgs } from "../bin/route.js";
 
 const tty = { stdinIsTTY: true, stdoutIsTTY: true };
@@ -35,5 +38,25 @@ describe("npx @lefine/mcp routing", () => {
   });
   it("--readonly (one word) is the setup flag, --read-only (two words) is the server flag", () => {
     expect(routeArgs(["--readonly"], client)).toEqual(["setup", "--readonly"]);
+  });
+});
+
+describe("npx @lefine/mcp --version and --help", () => {
+  const own = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string };
+  const bin = new URL("../bin/lefine-mcp.js", import.meta.url).pathname;
+
+  it("--version is this package's version, not lefine's", () => {
+    expect(metaOutput(["--version"], "1.2.3")).toBe("1.2.3\n");
+    expect(execFileSync("node", [bin, "--version"], { encoding: "utf-8" })).toBe(`${own.version}\n`);
+  });
+  it("--help names lefine-mcp and lists the server flags", () => {
+    const out = execFileSync("node", [bin, "--help"], { encoding: "utf-8" });
+    expect(out).toBe(HELP);
+    expect(out).not.toContain("Usage: lefine mcp");
+    for (const flag of ["--read-only", "--toolsets", "--allow-dir", "--tools-ttl", "LEFINE_TOKEN"]) expect(out).toContain(flag);
+  });
+  it("only as the first argument: `setup --help` still goes to lefine setup", () => {
+    expect(metaOutput(["setup", "--help"], "1.0.0")).toBeNull();
+    expect(metaOutput([], "1.0.0")).toBeNull();
   });
 });

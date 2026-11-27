@@ -8,7 +8,7 @@ Lefine as an MCP server for Claude, Cursor, VS Code, Codex and other AI apps. It
 2. **Adds local tools** that only a process on your machine can offer: upload a picture or a whole folder,
    import your translation files, and read which Lefine project a code folder belongs to.
 
-Nothing goes live without a person: publishing asks first, in the app or on a Lefine approval page.
+Who approves a publish depends on how you signed in. An AI app you connected with `npx @lefine/mcp setup` (sign-in in the browser) asks a person first, in the app or on a Lefine approval page. A plain API key (`LEFINE_TOKEN`) publishes right away, unless the workspace owner turned on **Ask me before agents publish or change content** (Lefine, Settings, API keys, Agent approvals). That switch is off by default.
 
 ## Install
 
@@ -43,7 +43,7 @@ From the server (always in sync, listed with `tools/list` and kept for 5 minutes
 | `lefine_lookup` | Find a page, key, media file, app, project, type or global by name ("z5k privacy page"). |
 | `lefine_read` | Run an action that only reads. |
 | `lefine_write` | Run an action that writes drafts. Nothing goes live. `steps` runs up to 50 at once. |
-| `lefine_publish` | Run an action that goes live. Asks a person first; a batch is one yes for the exact list. |
+| `lefine_publish` | Run an action that goes live. A connected AI app asks a person first (a batch is one yes for the exact list); an API key publishes right away unless Agent approvals is on. |
 | `lefine_edit` | Change fields of one page, global or key by name, as a draft. `dryRun` shows the diff. |
 | `lefine_launch`, `lefine_launch_status` | Take the workspace into a new market; read how it went. |
 
@@ -99,7 +99,7 @@ What the local tools can read and write, exactly:
 - **The key stays on your machine.** It goes only to the server it was saved for and never appears in tool
   output. `lefine.ts` and `lefine.config.*` are read as text: a cloned repository cannot run code by starting
   this server. Text from your files is marked as data in answers; do not let an agent treat it as instructions.
-- **Publishing asks a person first,** unless you turned that off in Lefine settings.
+- **Publishing asks a person first for a connected AI app, not for an API key.** With `LEFINE_TOKEN` and Agent approvals off (the default), a publish runs at once; each change is still recorded. Turn Agent approvals on in Lefine settings, or use `--read-only`, if an agent must not publish alone.
 - Not covered: a folder renamed between the path check and the read could redirect the open. Someone who can
   do that already has your account's files.
 
