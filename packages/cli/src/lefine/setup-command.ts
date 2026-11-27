@@ -31,6 +31,7 @@ import {
   type Installed,
   INSTRUCTIONS,
   isStdio,
+  sameJson,
   sameUrl,
   storedUrl,
   isWritable,
@@ -152,13 +153,45 @@ export interface ClaudeOptions {
   scope: Scope;
 }
 
-/** What `claude mcp get lefine` says: its `Scope:`, `Type:` and `URL:` lines (each read as a whole line, not searched for). */
-export function parseClaudeGet(output: string): { scope?: "user" | "project" | "local"; type?: string; url?: string } {
+/**
+ * What `claude mcp get lefine` says, read line by line: `Scope:`, `Type:`, `URL:`, and for a stdio entry
+ * `Command:`, `Args:` and the `Environment:` block (indented KEY=value lines under it).
+ */
+export function parseClaudeGet(output: string): { scope?: "user" | "project" | "local"; type?: string; url?: string; command?: string; args?: string; env?: Record<string, string> } {
   const line = (key: string) => output.match(new RegExp(`^\\s*${key}:\\s*(.+?)\\s*$`, "im"))?.[1];
   const scopeText = line("Scope");
   const scope = scopeText ? (/^user/i.test(scopeText) ? "user" : /^project/i.test(scopeText) ? "project" : /^local/i.test(scopeText) ? "local" : undefined) : undefined;
-  return { scope, type: line("Type")?.toLowerCase(), url: line("URL") };
+  let env: Record<string, string> | undefined;
+  const rows = output.split("\n");
+  const at = rows.findIndex((r) => /^\s*Environment:\s*$/i.test(r));
+  if (at >= 0) {
+    env = {};
+    const indent = rows[at]!.match(/^\s*/)![0].length;
+    for (const r of rows.slice(at + 1)) {
+      const m = r.match(/^(\s+)([A-Za-z_][A-Za-z0-9_]*)\s*[=:]\s*(.*?)\s*$/);
+      if (!m || m[1]!.length <= indent) break;
+      env[m[2]!] = m[3]!;
+    }
+  }
+  return { scope, type: line("Type")?.toLowerCase(), url: line("URL"), command: line("Command"), args: line("Args"), env };
 }
+
+/** The local (stdio) entry exactly as `claude mcp add` is told to write it (see claudeAddArgs). */
+export function expectedClaudeStdio(apiUrl?: string): { command: string; args: string; env: Record<string, string> } {
+  const a = claudeAddArgs(true, apiUrl);
+  const env: Record<string, string> = {};
+  for (let i = 0; i < a.length; i++) if (a[i] === "-e") {
+    const [k, ...v] = a[i + 1]!.split("=");
+    env[k!] = v.join("=");
+  }
+  const after = a.slice(a.indexOf("--") + 1);
+  return { command: after[0]!, args: after.slice(1).join(" "), env };
+}
+
+export const claudeStdioMatches = (have: ReturnType<typeof parseClaudeGet>, apiUrl?: string): boolean => {
+  const want = expectedClaudeStdio(apiUrl);
+  return have.type === "stdio" && have.command === want.command && have.args === want.args && sameJson(have.env ?? {}, want.env);
+};
 
 export async function setupClaudeCode(o: ClaudeOptions, run: Runner): Promise<ClientOutcome> {
   const client = "claude-code" as const;
@@ -171,7 +204,7 @@ export async function setupClaudeCode(o: ClaudeOptions, run: Runner): Promise<Cl
     // Already there. The same URL in the scope we were asked for: nothing to do. Anything else (an old stdio
     // entry, another URL or level, another scope's entry): replace it, in the scope where it lives.
     const have = parseClaudeGet(got.output);
-    const same = o.local ? have.type === "stdio" && /LEFINE_PROFILE/.test(got.output) : have.type !== "stdio" && sameUrl(have.url, want);
+    const same = o.local ? claudeStdioMatches(have, o.apiUrl) : have.type !== "stdio" && sameUrl(have.url, want);
     if (same && have.scope === o.scope) return { client, status: "unchanged", detail: "already added", file };
     await run("claude", ["mcp", "remove", MCP_NAME, "--scope", have.scope ?? o.scope]);
     updated = true;
@@ -429,7 +462,7 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
     const got = await run("claude", ["mcp", "get", MCP_NAME]);
     if (got.code !== 0) return [];
     const have = parseClaudeGet(got.output);
-    return [{ client: "claude-code", scope: have.scope === "user" ? "user" : "project", file: "claude mcp get lefine", config: have.type === "stdio" ? { command: "npx" } : { url: have.url ?? "" } }];
+    return [{ client: "claude-code", scope: have.scope === "user" ? "user" : "project", file: "claude mcp get lefine", config: have.type === "stdio" ? { command: have.command ?? "", args: (have.args ?? "").split(/\s+/).filter(Boolean), env: have.env ?? {} } : { url: have.url ?? "" } }];
   }
 
   async function allInstalled(clients?: ClientId[]): Promise<Installed[]> {
@@ -507,8 +540,11 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
     for (const r of rows) {
       // Only the field this app really reads counts: a URL in another field, or inside a longer string, does not.
       const u = storedUrl(ops.urlField(r.client), r.config);
-      if (isStdio(r.config)) {
-        findings.push({ level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) has an old local \`lefine\` entry that starts a program instead of using ${base}`, fix: "npx lefine setup --yes (it replaces the entry)" });
+      const localOk = isStdio(r.config) && sameJson(r.config, ops.shape(r.client, serverEntry(true, options.apiUrl)));
+      if (localOk) {
+        findings.push({ level: "ok", client: r.client, message: `${LABEL[r.client]}: lefine is the local server (npx -y lefine mcp, profile ${LOCAL_PROFILE})` });
+      } else if (isStdio(r.config)) {
+        findings.push({ level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) has a local \`lefine\` entry that is not exactly the one setup writes (another command, args or env), instead of ${base}`, fix: "npx lefine setup --yes (it replaces the entry)" });
       } else if (!u || !accepted.some((a) => sameUrl(u, a))) {
         findings.push({ level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) ${u ? `points \`lefine\` at ${u}` : "has a `lefine` entry with no URL where the app reads it"}, not ${accepted.join(" or ")}`, fix: "npx lefine setup --yes (it replaces the entry)" });
       } else findings.push({ level: "ok", client: r.client, message: `${LABEL[r.client]}: lefine points at ${u}` });
@@ -674,7 +710,7 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
   async function writeClient(client: ClientId, entry: ServerEntry, sc: Scope): Promise<ClientOutcome> {
     // Read the current entry first: the same one is left alone (no rewrite, no backup), another one is replaced.
     const before = (await ops.find(cwd, [client])).find((r) => r.scope === sc);
-    if (before && (entry.command !== undefined ? isStdio(before.config) && JSON.stringify(before.config.args) === JSON.stringify(entry.args) : !isStdio(before.config) && sameUrl(storedUrl(ops.urlField(client), before.config), entry.url))) {
+    if (before && (entry.command !== undefined ? sameJson(before.config, ops.shape(client, entry)) : !isStdio(before.config) && sameUrl(storedUrl(ops.urlField(client), before.config), entry.url))) {
       return { client, status: "unchanged", detail: "already set up", file: before.file };
     }
     const r = ops.write(client, entry, sc, cwd, options.backup !== false);

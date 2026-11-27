@@ -55,6 +55,7 @@ function fakeOps(detected: ClientId[] = [], stored: Installed[] = []) {
   const ops: ClientOps = {
     load: async () => {},
     urlField: () => "url",
+    shape: (_c, e) => ({ ...e }),
     detect: async () => detected,
     find: async (_cwd, clients) => stored.filter((s) => !clients || clients.includes(s.client)),
     write: (client, entry, scope, _cwd, backup) => (writes.push({ client, entry, scope, backup }), { ok: true, file: join(home, `${client}.json`), backup: backup ? join(home, `${client}.json.lefine-backup`) : undefined }),
@@ -177,6 +178,40 @@ describe("Claude Code", () => {
     expect(parseClaudeGet("lefine:\n  Scope: Local config (private)\n  Type: http\n  URL: https://a.test/x")).toEqual({ scope: "local", type: "http", url: "https://a.test/x" });
     expect(parseClaudeGet("nothing useful")).toEqual({ scope: undefined, type: undefined, url: undefined });
   });
+  const stdioOut = (cmd: string, args: string, env: string[]) =>
+    `lefine:\n  Scope: User config\n  Status: ok\n  Type: stdio\n  Command: ${cmd}\n  Args: ${args}\n  Environment:\n${env.map((e) => `    ${e}`).join("\n")}\n`;
+  const local = { local: true, readonly: false, scope: "user" as const };
+
+  test("local: the exact stdio entry (npx, -y lefine mcp, LEFINE_PROFILE=mcp) is unchanged", async () => {
+    const { calls, run } = runner([{ code: 0, output: stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=mcp"]) }]);
+    expect((await setupClaudeCode(local, run)).status).toBe("unchanged");
+    expect(calls).toHaveLength(1);
+  });
+  test("local: spoofed stdio entries are replaced where they live", async () => {
+    for (const output of [
+      stdioOut("node", "-y lefine mcp", ["LEFINE_PROFILE=mcp"]), // other command
+      stdioOut("sh", "-c evil LEFINE_PROFILE=mcp lefine mcp", ["LEFINE_PROFILE=mcp"]), // LEFINE_PROFILE only as decoration
+      stdioOut("npx", "-y lefine-evil mcp", ["LEFINE_PROFILE=mcp"]), // other package
+      stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=mcp", "NODE_OPTIONS=--require=/tmp/x.js"]), // extra env
+      stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=other"]), // other profile
+      stdioOut("npx", "-y lefine mcp", []), // no profile
+      "lefine:\n  Scope: Project config\n  Type: http\n  URL: https://dash.lefine.ai/v1/mcp\n", // a remote entry
+    ]) {
+      const { calls, run } = runner([{ code: 0, output }, { code: 0, output: "" }, { code: 0, output: "" }]);
+      expect((await setupClaudeCode(local, run)).status).toBe("updated");
+      expect(calls.map((c) => c[1])).toEqual(["get", "remove", "add"]);
+    }
+  });
+  test("local: the exact entry in another scope is not enough", async () => {
+    const { calls, run } = runner([{ code: 0, output: stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=mcp"]).replace("User config", "Project config") }, { code: 0, output: "" }, { code: 0, output: "" }]);
+    expect((await setupClaudeCode(local, run)).status).toBe("updated");
+    expect(calls[1]).toContain("project");
+  });
+  test("parseClaudeGet reads Command, Args and the Environment block only", () => {
+    const got = parseClaudeGet(stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=mcp", "LEFINE_API_URL=https://x.test"]) + "Note: A=b\n");
+    expect(got).toMatchObject({ type: "stdio", command: "npx", args: "-y lefine mcp", env: { LEFINE_PROFILE: "mcp", LEFINE_API_URL: "https://x.test" } });
+  });
+
   test("blocked by policy: explains deniedMcpServers and does not touch settings", async () => {
     const { run } = runner([{ code: 1, output: "" }, { code: 1, output: 'MCP server "lefine" is blocked by enterprise policy' }]);
     const r = await setupClaudeCode(o, run);
@@ -360,6 +395,34 @@ describe("setup without a terminal (JSON)", () => {
       expect(report().results[0]!.status).toBe("updated");
     }
   });
+  test("--local: the exact stdio entry is unchanged; spoofed ones (other command, extra env, args elsewhere) are replaced", async () => {
+    const main = { token: "lfn_x", apiUrl: "https://dash.lefine.ai", workspace: { id: "w", slug: "s", name: "S" }, scopes: [], savedAt: "x" };
+    saveCredentials(main, "mcp");
+    const ours = { command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } };
+    const spoofs: Record<string, unknown>[] = [
+      { ...ours, command: "node" },
+      { command: "sh", args: ["-c", "evil", "-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } },
+      { ...ours, env: { LEFINE_PROFILE: "mcp", NODE_OPTIONS: "--require=/tmp/x.js" } },
+      { ...ours, args: ["-y", "lefine", "mcp", "--evil"] },
+      { command: "npx", args: ["-y", "lefine", "mcp"], env: { PATH: "/tmp/evil" } },
+      { ...ours, extra: true },
+    ];
+    for (const config of [ours, ...spoofs]) {
+      const { ops, writes } = fakeOps([], [{ client: "cursor", scope: "user", file: join(home, "c.json"), config }]);
+      lines = [];
+      await setupCommand({ client: ["cursor"], local: true, check: false }, { env, ops, log, tty: false });
+      expect(writes.length).toBe(config === ours ? 0 : 1);
+      expect(report().results[0]!.status).toBe(config === ours ? "unchanged" : "updated");
+    }
+  });
+  test("--doctor: the exact local entry is fine, a spoofed stdio entry is a problem", async () => {
+    const ok = { client: "cursor" as const, scope: "user" as const, file: "/h/c.json", config: { command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } } };
+    const bad = { client: "zed" as const, scope: "user" as const, file: "/h/z.json", config: { command: "node", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } } };
+    await setupCommand({ doctor: true, check: false }, { env, ops: fakeOps([], [ok, bad]).ops, log, tty: false, settingsFiles: [] });
+    const f = report().findings!;
+    expect(f.some((x) => x.level === "ok" && x.message.includes("Cursor"))).toBe(true);
+    expect(f.some((x) => x.level === "problem" && x.message.includes("Zed"))).toBe(true);
+  });
   test("an old stdio entry is replaced", async () => {
     const stored: Installed[] = [{ client: "cursor", scope: "user", file: join(home, "c.json"), config: { command: "npx", args: ["-y", "@lefine/mcp"] } }];
     const { ops, writes } = fakeOps([], stored);
@@ -401,7 +464,7 @@ describe("--list, --remove, --doctor, --print", () => {
     expect(code).toBe(1);
     const f = report().findings!;
     const problems = f.filter((x) => x.level === "problem").map((x) => x.message);
-    expect(problems.some((m) => m.includes("old local `lefine` entry"))).toBe(true);
+    expect(problems.some((m) => m.includes("local `lefine` entry that is not exactly"))).toBe(true);
     expect(problems.some((m) => m.includes("https://old.example.com/mcp"))).toBe(true);
     expect(problems.some((m) => m.includes("deniedMcpServers"))).toBe(true);
     expect(f.some((x) => x.level === "ok" && x.message.includes("VS Code"))).toBe(true);

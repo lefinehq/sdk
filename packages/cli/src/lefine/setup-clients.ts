@@ -66,6 +66,8 @@ export interface WriteResult {
 export interface ClientOps {
   /** Load the client table now: write, remove and snippet are synchronous and need it. */
   load(): Promise<void>;
+  /** The entry as this app stores it (what add-mcp writes for `entry`): the whole object, to compare with a stored one. */
+  shape(client: ClientId, entry: ServerEntry): Record<string, unknown>;
   /** The key this app reads the server URL from (`url`, `serverUrl`, `httpUrl`...). */
   urlField(client: ClientId): string;
   /** Apps whose config folder exists (Claude Code is detected by `claude` on PATH, not here). */
@@ -99,6 +101,13 @@ export function sameUrl(a: unknown, b: unknown): boolean {
 export function storedUrl(field: string, config: Record<string, unknown>): string | undefined {
   const v = config[field];
   return typeof v === "string" ? v : undefined;
+}
+
+/** Same JSON value, whatever the key order. */
+export function sameJson(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(norm) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v as object).sort(([x], [y]) => x.localeCompare(y)).map(([k, x]) => [k, norm(x)])) : v;
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
 }
 
 /** A local (stdio) entry: it starts a program. */
@@ -235,6 +244,12 @@ export const addMcpOps: ClientOps = {
     if (unsafe) return { ok: false, removed: false, file: f, error: unsafe };
     const r = mod.removeServer(client, MCP_NAME, { local: scope === "project", cwd });
     return { ok: r.success, removed: r.removed, file: r.path, error: r.error };
+  },
+
+  shape(client, entry) {
+    const agent = loaded?.agents[client as import("add-mcp").AgentType];
+    if (!agent) return { ...entry };
+    return (agent.transformConfig(MCP_NAME, toServerConfig(entry), { local: false }) as Record<string, unknown>) ?? { ...entry };
   },
 
   urlField(client) {

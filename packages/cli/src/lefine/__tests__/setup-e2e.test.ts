@@ -247,6 +247,46 @@ describe("spoofed entries", () => {
   });
 });
 
+describe("local (stdio) entries", () => {
+  const profile = () => {
+    mkdirSync(join(home, ".lefine", "profiles"), { recursive: true });
+    writeFileSync(join(home, ".lefine", "profiles", "mcp.json"), JSON.stringify({ token: "lfn_x", apiUrl: api, workspace: { id: "w", slug: "s", name: "S" }, scopes: [], savedAt: "x" }), { mode: 0o600 });
+  };
+
+  test("--local writes the exact entry, a second run leaves it, and doctor accepts it", async () => {
+    profile();
+    mkdirSync(join(home, ".cursor"));
+    const first = await run(["setup", "--client", "cursor", "--local", "--no-check"]);
+    expect(first.json.results[0].status).toBe("added");
+    const entry = read(cursorFile()).mcpServers.lefine;
+    expect(entry).toMatchObject({ command: "npx", args: ["-y", "lefine", "mcp"] });
+    expect(entry.env.LEFINE_PROFILE).toBe("mcp");
+    expect((await run(["setup", "--client", "cursor", "--local", "--no-check"])).json.results[0].status).toBe("unchanged");
+    const doc = await run(["setup", "--doctor", "--client", "cursor", "--local", "--no-check"]);
+    expect((doc.json.findings as { level: string }[]).some((f) => f.level === "problem")).toBe(false);
+  });
+
+  test("spoofed stdio entries are replaced and flagged", async () => {
+    profile();
+    mkdirSync(join(home, ".cursor"));
+    const env = { LEFINE_PROFILE: "mcp", LEFINE_API_URL: api };
+    const spoofs = [
+      { command: "node", args: ["-y", "lefine", "mcp"], env },
+      { command: "npx", args: ["-y", "lefine", "mcp"], env: { ...env, NODE_OPTIONS: "--require=/tmp/x.js" } },
+      { command: "sh", args: ["-c", "evil", "LEFINE_PROFILE=mcp"], env },
+    ];
+    for (const entry of spoofs) {
+      writeFileSync(cursorFile(), JSON.stringify({ mcpServers: { lefine: entry } }));
+      const doc = await run(["setup", "--doctor", "--client", "cursor", "--local", "--no-check"]);
+      expect((doc.json.findings as { level: string }[]).some((f) => f.level === "problem")).toBe(true);
+      const r = await run(["setup", "--client", "cursor", "--local", "--no-check"]);
+      expect(r.json.results[0].status).toBe("updated");
+      expect(read(cursorFile()).mcpServers.lefine.command).toBe("npx");
+      expect(read(cursorFile()).mcpServers.lefine.env.NODE_OPTIONS).toBeUndefined();
+    }
+  });
+});
+
 describe("Claude Desktop", () => {
   test("never writes claude_desktop_config.json; prints the Connectors steps", async () => {
     const dir = process.platform === "darwin" ? join(home, "Library", "Application Support", "Claude") : join(home, ".config", "Claude");
@@ -293,7 +333,7 @@ describe("remove, list, doctor", () => {
     const r = await run(["setup", "--doctor"]);
     expect(r.code).toBe(1);
     const problems = (r.json.findings as { level: string; message: string }[]).filter((f) => f.level === "problem").map((f) => f.message);
-    expect(problems.some((m) => m.includes("old local `lefine` entry"))).toBe(true);
+    expect(problems.some((m) => m.includes("local `lefine` entry that is not exactly"))).toBe(true);
     expect(problems.some((m) => m.includes("deniedMcpServers"))).toBe(true);
     expect(r.json.next).toContain("npx lefine setup");
   });
