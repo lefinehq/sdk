@@ -3,7 +3,35 @@
 Lefine for AI agents. Claude, Cursor and other MCP clients can translate your app, edit and publish
 website pages, and make localized videos, with you approving anything that goes live.
 
-## Sign in
+## Set it up
+
+```sh
+npx @lefine/mcp
+```
+
+That opens the setup wizard (the same as `npx lefine setup`). It finds your AI apps (Claude Code, Cursor,
+VS Code, Windsurf, Codex, Gemini CLI, Zed), adds the Lefine server to the ones you pick, checks that the server
+answers, and tells you the one click each app needs to sign in. It can read and edit; it asks you before it
+publishes (unless you turn that off in Lefine settings). Claude Desktop and ChatGPT take a URL in their own
+settings, so for them it prints the steps (Settings > Connectors > Add custom connector) and writes no file.
+
+```sh
+npx @lefine/mcp --list      # where Lefine is set up
+npx @lefine/mcp --doctor    # old entries, a blocked server, no claude command, server not reachable
+npx @lefine/mcp --remove    # take Lefine out again
+npx @lefine/mcp --yes --readonly   # no questions, read-only access
+```
+
+Without a terminal (an agent or CI runs it) the command prints one JSON object with a `next` command.
+`setup`, `--client`, `--readonly`, `--project`, `--print` and `--no-backup` work as in `npx lefine setup`.
+
+An AI app that starts `npx -y @lefine/mcp` as its server keeps working: when stdin is not a terminal this
+package is the stdio server, as before.
+
+## Sign in (local server only)
+
+The remote server needs no key: the app opens a browser page and you approve there. Only the local server
+(`npx -y lefine mcp`, for clients that start a process) uses a key:
 
 ```sh
 npx lefine login
@@ -12,9 +40,10 @@ npx lefine login
 Or set `LEFINE_TOKEN` to a key from Lefine, Settings > API keys. To let the agent reach Content,
 Studio or your connected apps, make the key there and tick them under "Also reach".
 
-## Add it to your client
+## By hand
 
-**Claude Desktop** (`claude_desktop_config.json`), and any client that starts a local server:
+**Claude Desktop** (`claude_desktop_config.json` only starts local servers), and any client that starts a
+local process:
 
 ```json
 {
@@ -24,16 +53,15 @@ Studio or your connected apps, make the key there and tick them under "Also reac
 }
 ```
 
-**Claude, ChatGPT, Claude Code, Cursor, VS Code and other remote-capable clients** can skip this
-package and connect to the server directly. They sign in to Lefine with OAuth, so there is no key to
-copy:
+**Remote-capable clients** connect to the server directly. They sign in with OAuth, so there is no key to copy:
 
 ```sh
-claude mcp add --transport http lefine https://dash.lefine.ai/v1/mcp
+claude mcp add --transport http --scope user lefine https://dash.lefine.ai/v1/mcp
 ```
 
-In Claude, add the same URL under Settings > Connectors > Add custom connector. A key also works:
-add `--header "Authorization: Bearer <key>"`.
+Then type `/mcp` in Claude Code, pick lefine and choose Authenticate. In Claude Desktop, Claude on the web
+and ChatGPT add the same URL under Settings > Connectors > Add custom connector. For read-only access use
+`https://dash.lefine.ai/v1/mcp?level=read`.
 
 ## What the agent gets
 

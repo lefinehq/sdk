@@ -1,5 +1,13 @@
 # @lefine/mcp
 
+## 0.3.0
+
+### Minor Changes
+
+- `npx @lefine/mcp` is the friendly front door. Run it in a terminal with no arguments and it opens the setup wizard (the same code as `npx lefine setup`, no copy). `npx @lefine/mcp setup`, `--list`, `--remove`, `--doctor`, `--print`, `--yes`, `--readonly` mirror `lefine setup`. When an AI app starts it (stdin is not a terminal) it is the stdio server, exactly as before, so configs that say `npx -y @lefine/mcp` keep working. README starts with `npx @lefine/mcp`.
+- Updated dependencies
+  - lefine@0.10.0
+
 ## 0.2.7
 
 ### Patch Changes
