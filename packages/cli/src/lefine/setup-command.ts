@@ -17,7 +17,7 @@
  */
 
 import { exec, execFile } from "node:child_process";
-import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { bold, dim, green, red, yellow } from "../utils/colors.js";
@@ -40,6 +40,7 @@ import {
   type Scope,
   type ServerEntry,
   tidy,
+  unsafePath,
   WRITABLE,
 } from "./setup-clients.js";
 import { clackUi, type SetupUi } from "./setup-ui.js";
@@ -147,6 +148,8 @@ export interface ClientOutcome {
 }
 
 export interface ClaudeOptions {
+  /** Where Claude Code keeps its config, to read our entry as structured data. Without it the text of `claude mcp get` is parsed. */
+  files?: ClaudeFiles;
   local: boolean;
   apiUrl?: string;
   readonly: boolean;
@@ -157,23 +160,31 @@ export interface ClaudeOptions {
  * What `claude mcp get lefine` says, read line by line: `Scope:`, `Type:`, `URL:`, and for a stdio entry
  * `Command:`, `Args:` and the `Environment:` block (indented KEY=value lines under it).
  */
-export function parseClaudeGet(output: string): { scope?: "user" | "project" | "local"; type?: string; url?: string; command?: string; args?: string; env?: Record<string, string> } {
+export function parseClaudeGet(output: string): { scope?: "user" | "project" | "local"; type?: string; url?: string; command?: string; args?: string; env?: Record<string, string>; malformed?: boolean } {
   const line = (key: string) => output.match(new RegExp(`^\\s*${key}:\\s*(.+?)\\s*$`, "im"))?.[1];
   const scopeText = line("Scope");
   const scope = scopeText ? (/^user/i.test(scopeText) ? "user" : /^project/i.test(scopeText) ? "project" : /^local/i.test(scopeText) ? "local" : undefined) : undefined;
+  // Fail closed: a line inside the Environment block that is not KEY=value marks the whole block malformed.
   let env: Record<string, string> | undefined;
+  let malformed = false;
   const rows = output.split("\n");
   const at = rows.findIndex((r) => /^\s*Environment:\s*$/i.test(r));
   if (at >= 0) {
     env = {};
     const indent = rows[at]!.match(/^\s*/)![0].length;
     for (const r of rows.slice(at + 1)) {
-      const m = r.match(/^(\s+)([A-Za-z_][A-Za-z0-9_]*)\s*[=:]\s*(.*?)\s*$/);
-      if (!m || m[1]!.length <= indent) break;
-      env[m[2]!] = m[3]!;
+      if (r.trim() === "") break;
+      const lead = r.match(/^\s*/)![0].length;
+      if (lead <= indent) break; // the block ended: the next field starts
+      const m = r.match(/^\s+([A-Za-z_][A-Za-z0-9_]*)=(.*?)\s*$/);
+      if (!m) {
+        malformed = true;
+        break;
+      }
+      env[m[1]!] = m[2]!;
     }
   }
-  return { scope, type: line("Type")?.toLowerCase(), url: line("URL"), command: line("Command"), args: line("Args"), env };
+  return { scope, type: line("Type")?.toLowerCase(), url: line("URL"), command: line("Command"), args: line("Args"), env, malformed };
 }
 
 /** The local (stdio) entry exactly as `claude mcp add` is told to write it (see claudeAddArgs). */
@@ -190,8 +201,89 @@ export function expectedClaudeStdio(apiUrl?: string): { command: string; args: s
 
 export const claudeStdioMatches = (have: ReturnType<typeof parseClaudeGet>, apiUrl?: string): boolean => {
   const want = expectedClaudeStdio(apiUrl);
-  return have.type === "stdio" && have.command === want.command && have.args === want.args && sameJson(have.env ?? {}, want.env);
+  return !have.malformed && have.type === "stdio" && have.command === want.command && have.args === want.args && sameJson(have.env ?? {}, want.env);
 };
+
+export interface ClaudeFiles {
+  home: string;
+  cwd: string;
+  configDir?: string;
+}
+
+type ClaudeSlot = "user" | "local" | "project";
+export type ClaudeEntries = Partial<Record<ClaudeSlot, Record<string, unknown>>>;
+
+/** What Claude Code stores for our entry, in the shape its config files use. */
+export function expectedClaudeEntry(o: { local: boolean; apiUrl?: string; readonly?: boolean }): Record<string, unknown> {
+  if (!o.local) return { type: "http", url: remoteUrl(o.apiUrl, o.readonly) };
+  const want = expectedClaudeStdio(o.apiUrl);
+  return { type: "stdio", command: want.command, args: want.args.split(" "), env: want.env };
+}
+
+/** An entry as Claude stores it, with the defaults filled in, so two spellings of one entry compare equal. */
+function normalizeClaudeEntry(v: Record<string, unknown>): Record<string, unknown> {
+  if (v.type === undefined && typeof v.command === "string") return { ...v, type: "stdio", env: v.env ?? {}, args: v.args ?? [] };
+  if (v.type === "stdio") return { ...v, env: v.env ?? {}, args: v.args ?? [] };
+  return v;
+}
+
+/**
+ * Our entry in Claude Code's own config files, read only (writes always go through `claude mcp add/remove`):
+ * user = ~/.claude.json mcpServers, local = ~/.claude.json projects[<cwd>].mcpServers, project = <cwd>/.mcp.json.
+ * Undefined when a file cannot be read, parsed or is a symlink: the caller then falls back to the text of
+ * `claude mcp get`, which fails closed.
+ */
+export function readClaudeEntries(f: ClaudeFiles): ClaudeEntries | undefined {
+  const readJson = (file: string, root?: string): Record<string, unknown> | undefined | null => {
+    if (!existsSync(file)) return null;
+    if (unsafePath(file, root)) return undefined;
+    try {
+      const doc: unknown = JSON.parse(readFileSync(file, "utf-8"));
+      return doc && typeof doc === "object" && !Array.isArray(doc) ? (doc as Record<string, unknown>) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const pick = (servers: unknown): Record<string, unknown> | undefined | "bad" => {
+    if (servers === undefined) return undefined;
+    if (!servers || typeof servers !== "object" || Array.isArray(servers)) return "bad";
+    const v = (servers as Record<string, unknown>)[MCP_NAME];
+    if (v === undefined) return undefined;
+    return v && typeof v === "object" && !Array.isArray(v) ? normalizeClaudeEntry(v as Record<string, unknown>) : "bad";
+  };
+  const dir = f.configDir || f.home;
+  const main = readJson(join(dir, ".claude.json"));
+  if (!main) return undefined; // missing or unreadable
+  const out: ClaudeEntries = {};
+  const user = pick(main.mcpServers);
+  if (user === "bad") return undefined;
+  if (user) out.user = user;
+  const projects = main.projects;
+  if (projects && typeof projects === "object" && !Array.isArray(projects)) {
+    let real = f.cwd;
+    try {
+      real = realpathSync.native(f.cwd);
+    } catch {
+      /* keep cwd */
+    }
+    for (const key of new Set([f.cwd, real])) {
+      const proj = (projects as Record<string, unknown>)[key];
+      if (proj && typeof proj === "object") {
+        const local = pick((proj as Record<string, unknown>).mcpServers);
+        if (local === "bad") return undefined;
+        if (local) out.local = local;
+      }
+    }
+  }
+  const mcp = readJson(join(f.cwd, ".mcp.json"), f.cwd);
+  if (mcp === undefined) return undefined;
+  if (mcp) {
+    const project = pick(mcp.mcpServers);
+    if (project === "bad") return undefined;
+    if (project) out.project = project;
+  }
+  return out;
+}
 
 export async function setupClaudeCode(o: ClaudeOptions, run: Runner): Promise<ClientOutcome> {
   const client = "claude-code" as const;
@@ -200,8 +292,24 @@ export async function setupClaudeCode(o: ClaudeOptions, run: Runner): Promise<Cl
   const want = o.local ? "" : remoteUrl(o.apiUrl, o.readonly);
   const got = await run("claude", ["mcp", "get", MCP_NAME]);
   let updated = false;
-  if (got.code === 0) {
-    // Already there. The same URL in the scope we were asked for: nothing to do. Anything else (an old stdio
+  const structured = got.code === 0 && o.files ? readClaudeEntries(o.files) : undefined;
+  if (got.code === 0 && structured && Object.keys(structured).length > 0) {
+    // Whole objects, compared as data: the entry in the scope we were asked for must be exactly ours; a foreign
+    // entry in any scope is removed where it lives; an exact one in another scope is left alone.
+    const wantEntry = expectedClaudeEntry(o);
+    const exact = (e?: Record<string, unknown>) => e !== undefined && sameJson(e, wantEntry);
+    const slot: ClaudeSlot = o.scope === "project" ? "project" : "user";
+    let removedAny = false;
+    for (const sc of ["user", "local", "project"] as const) {
+      const e = structured[sc];
+      if (e === undefined || (sc === slot ? exact(e) : exact(e))) continue;
+      await run("claude", ["mcp", "remove", MCP_NAME, "--scope", sc]);
+      removedAny = true;
+    }
+    if (exact(structured[slot])) return { client, status: removedAny ? "updated" : "unchanged", detail: removedAny ? "updated (a foreign entry in another scope was removed)" : "already added", file };
+    updated = removedAny;
+  } else if (got.code === 0) {
+    // No structured config to read: the text of `claude mcp get`, failing closed. The same URL in the scope we were asked for: nothing to do. Anything else (an old stdio
     // entry, another URL or level, another scope's entry): replace it, in the scope where it lives.
     const have = parseClaudeGet(got.output);
     const same = o.local ? claudeStdioMatches(have, o.apiUrl) : have.type !== "stdio" && sameUrl(have.url, want);
@@ -456,13 +564,27 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
     return ops.find(cwd, clients);
   }
 
+  function claudeFiles(): ClaudeFiles {
+    return { home: e.home, cwd, configDir: e.env.CLAUDE_CONFIG_DIR };
+  }
+
   async function claudeEntries(): Promise<Installed[]> {
-    // The CLI knows Claude Code's entries best: ask it, show what it says.
     if (!onPath("claude", e) && !deps.run) return [];
     const got = await run("claude", ["mcp", "get", MCP_NAME]);
     if (got.code !== 0) return [];
+    const structured = readClaudeEntries(claudeFiles());
+    if (structured && Object.keys(structured).length > 0) {
+      // Same shape as the other apps' entries (no `type`), so one comparison serves all.
+      return (Object.entries(structured) as [ClaudeSlot, Record<string, unknown>][]).map(([sc, entry]) => {
+        const { type: _type, ...rest } = entry;
+        return { client: "claude-code" as const, scope: sc === "user" ? ("user" as const) : ("project" as const), file: "claude mcp get lefine", config: rest };
+      });
+    }
+    // Text fallback: an entry whose block does not parse cleanly is reported as foreign (fail closed).
     const have = parseClaudeGet(got.output);
-    return [{ client: "claude-code", scope: have.scope === "user" ? "user" : "project", file: "claude mcp get lefine", config: have.type === "stdio" ? { command: have.command ?? "", args: (have.args ?? "").split(/\s+/).filter(Boolean), env: have.env ?? {} } : { url: have.url ?? "" } }];
+    const stdio = have.type === "stdio";
+    const ours = stdio && claudeStdioMatches(have);
+    return [{ client: "claude-code", scope: have.scope === "user" ? "user" : "project", file: "claude mcp get lefine", config: stdio ? (ours ? { command: "npx", args: ["-y", "lefine", "mcp"], env: expectedClaudeStdio().env } : { command: have.command ?? "?", args: (have.args ?? "").split(/\s+/).filter(Boolean), env: { ...(have.env ?? {}), ...(have.malformed ? { "?": "malformed" } : {}) } }) : { url: have.url ?? "" } }];
   }
 
   async function allInstalled(clients?: ClientId[]): Promise<Installed[]> {
@@ -658,7 +780,7 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
         outcome =
           !onPath("claude", e) && !deps.run
             ? { client, status: "failed", detail: "the `claude` command is not on your PATH. Install Claude Code, or run: claude mcp add --transport http --scope user lefine " + finalUrl }
-            : await setupClaudeCode({ local, apiUrl: options.apiUrl, readonly: useReadonly, scope: useScope }, run);
+            : await setupClaudeCode({ local, apiUrl: options.apiUrl, readonly: useReadonly, scope: useScope, files: claudeFiles() }, run);
       } else if (!local && (INSTRUCTIONS as readonly string[]).includes(client)) {
         // claude_desktop_config.json only starts local servers; a url entry there does not load. Remote ones are Connectors.
         outcome = { client, status: "manual", detail: manualSteps(client, finalUrl).join(" ") };

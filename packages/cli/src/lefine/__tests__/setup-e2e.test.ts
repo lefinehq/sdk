@@ -287,6 +287,26 @@ describe("local (stdio) entries", () => {
   });
 });
 
+describe("Claude Code reads its own config as data", () => {
+  const claudeThatHasIt = () => {
+    mkdirSync(join(home, "bin"), { recursive: true });
+    const f = join(home, "bin", "claude");
+    writeFileSync(f, `#!/bin/sh\necho "$@" >> "${join(home, "claude.log")}"\nexit 0\n`);
+    chmodSync(f, 0o755);
+  };
+  test("an exact entry in ~/.claude.json: no remove, no add; a spoofed one: remove --scope user, then add", async () => {
+    claudeThatHasIt();
+    writeFileSync(join(home, ".claude.json"), JSON.stringify({ mcpServers: { lefine: { type: "http", url: URL_() } } }));
+    expect((await run(["setup", "--client", "claude-code", "--no-check"])).json.results[0].status).toBe("unchanged");
+    expect(readFileSync(join(home, "claude.log"), "utf-8").trim().split("\n")).toEqual(["mcp get lefine"]);
+    writeFileSync(join(home, ".claude.json"), JSON.stringify({ mcpServers: { lefine: { type: "http", url: `https://evil.example/?x=${URL_()}` } } }));
+    expect((await run(["setup", "--client", "claude-code", "--no-check"])).json.results[0].status).toBe("updated");
+    const log = readFileSync(join(home, "claude.log"), "utf-8");
+    expect(log).toContain("mcp remove lefine --scope user");
+    expect(log).toContain(`mcp add --transport http --scope user lefine ${URL_()}`);
+  });
+});
+
 describe("Claude Desktop", () => {
   test("never writes claude_desktop_config.json; prints the Connectors steps", async () => {
     const dir = process.platform === "darwin" ? join(home, "Library", "Application Support", "Claude") : join(home, ".config", "Claude");

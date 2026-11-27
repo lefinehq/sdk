@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadCredentials, saveCredentials } from "../credentials.js";
@@ -8,6 +8,7 @@ import {
   claudeAddArgs,
   detectClients,
   parseClaudeGet,
+  readClaudeEntries,
   parseClients,
   printSnippets,
   remoteUrl,
@@ -175,8 +176,8 @@ describe("Claude Code", () => {
     }
   });
   test("parseClaudeGet reads whole lines", () => {
-    expect(parseClaudeGet("lefine:\n  Scope: Local config (private)\n  Type: http\n  URL: https://a.test/x")).toEqual({ scope: "local", type: "http", url: "https://a.test/x" });
-    expect(parseClaudeGet("nothing useful")).toEqual({ scope: undefined, type: undefined, url: undefined });
+    expect(parseClaudeGet("lefine:\n  Scope: Local config (private)\n  Type: http\n  URL: https://a.test/x")).toMatchObject({ scope: "local", type: "http", url: "https://a.test/x" });
+    expect(parseClaudeGet("nothing useful")).toMatchObject({ scope: undefined, type: undefined, url: undefined });
   });
   const stdioOut = (cmd: string, args: string, env: string[]) =>
     `lefine:\n  Scope: User config\n  Status: ok\n  Type: stdio\n  Command: ${cmd}\n  Args: ${args}\n  Environment:\n${env.map((e) => `    ${e}`).join("\n")}\n`;
@@ -210,6 +211,115 @@ describe("Claude Code", () => {
   test("parseClaudeGet reads Command, Args and the Environment block only", () => {
     const got = parseClaudeGet(stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=mcp", "LEFINE_API_URL=https://x.test"]) + "Note: A=b\n");
     expect(got).toMatchObject({ type: "stdio", command: "npx", args: "-y lefine mcp", env: { LEFINE_PROFILE: "mcp", LEFINE_API_URL: "https://x.test" } });
+  });
+
+  test("malformed Environment block (text path) fails closed: replaced", async () => {
+    for (const env of [["LEFINE_PROFILE=mcp", "this is not an env line"], ["LEFINE_PROFILE mcp"], ["LEFINE_PROFILE=mcp", "  deeper=x", "}{"]]) {
+      const { calls, run } = runner([{ code: 0, output: stdioOut("npx", "-y lefine mcp", env) }, { code: 0, output: "" }, { code: 0, output: "" }]);
+      expect((await setupClaudeCode(local, run)).status).toBe("updated");
+      expect(calls.map((c) => c[1])).toEqual(["get", "remove", "add"]);
+    }
+    expect(parseClaudeGet(stdioOut("npx", "-y lefine mcp", ["A=b", "junk"])).malformed).toBe(true);
+    expect(parseClaudeGet(stdioOut("npx", "-y lefine mcp", ["A=b"])).malformed).toBe(false);
+  });
+  test("the real `claude mcp get` text format matches", async () => {
+    const { calls, run } = runner([{ code: 0, output: "lefine:\n  Scope: User config (available in all your projects)\n  Status: ✔ connected\n  Type: stdio\n  Command: npx\n  Args: -y lefine mcp\n  Environment:\n    LEFINE_PROFILE=mcp\n\nTo remove this server, run: claude mcp remove \"lefine\" -s user\n" }]);
+    expect((await setupClaudeCode(local, run)).status).toBe("unchanged");
+    expect(calls).toHaveLength(1);
+  });
+
+  describe("structured config (~/.claude.json, .mcp.json)", () => {
+    const text = "lefine:\n  Scope: User config\n  Type: stdio\n  Command: npx\n  Args: -y lefine mcp\n  Environment:\n    LEFINE_PROFILE=mcp\n"; // would match: the files decide
+    const OURS = { type: "stdio", command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } };
+    const REMOTE = { type: "http", url: "https://dash.lefine.ai/v1/mcp" };
+    const proj = () => join(home, "proj");
+    const files = () => ({ home, cwd: proj() });
+    const put = (claudeJson: unknown, mcpJson?: unknown) => {
+      mkdirSync(proj(), { recursive: true });
+      writeFileSync(join(home, ".claude.json"), JSON.stringify(claudeJson));
+      if (mcpJson) writeFileSync(join(proj(), ".mcp.json"), JSON.stringify(mcpJson));
+    };
+    const go = async (opts: Partial<typeof local>, replies: RunResult[] = []) => {
+      const calls: string[][] = [];
+      const q = [{ code: 0, output: text }, ...replies];
+      const r = await setupClaudeCode({ ...local, ...opts, files: files() }, async (_c, a) => (calls.push(a), q.shift() ?? { code: 0, output: "" }));
+      return { r, calls };
+    };
+
+    test("readClaudeEntries: user, local and project slots", () => {
+      put({ mcpServers: { lefine: REMOTE }, projects: { [proj()]: { mcpServers: { lefine: OURS } } } }, { mcpServers: { lefine: { command: "npx" } } });
+      const got = readClaudeEntries(files())!;
+      expect(got.user).toEqual(REMOTE);
+      expect(got.local).toEqual(OURS);
+      expect(got.project).toMatchObject({ type: "stdio", command: "npx", args: [], env: {} });
+    });
+    test("exact stdio entry in user scope: unchanged, even though no text is looked at", async () => {
+      put({ mcpServers: { lefine: OURS } });
+      const { r, calls } = await go({});
+      expect(r.status).toBe("unchanged");
+      expect(calls).toHaveLength(1);
+    });
+    test("spoofed stdio entries: whole-object compare replaces them (args as array, extra env, other command, extra keys)", async () => {
+      for (const bad of [
+        { ...OURS, command: "node" },
+        { ...OURS, args: ["-y", "lefine", "mcp", "x"] },
+        { ...OURS, args: ["-y lefine mcp"] },
+        { ...OURS, env: { LEFINE_PROFILE: "mcp", NODE_OPTIONS: "--require=/tmp/x.js" } },
+        { ...OURS, env: {} },
+        { ...OURS, headers: { a: "b" } },
+      ]) {
+        put({ mcpServers: { lefine: bad } });
+        const { r, calls } = await go({}, [{ code: 0, output: "" }, { code: 0, output: "" }]);
+        expect(r.status).toBe("updated");
+        expect(calls.map((c) => c[1])).toEqual(["get", "remove", "add"]);
+        expect(calls[1]).toEqual(["mcp", "remove", "lefine", "--scope", "user"]);
+      }
+    });
+    test("a stdio entry without `type` is the same entry", async () => {
+      put({ mcpServers: { lefine: { command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } } } });
+      expect((await go({})).r.status).toBe("unchanged");
+    });
+    test("remote: exact URL unchanged; spoofed URL replaced", async () => {
+      put({ mcpServers: { lefine: REMOTE } });
+      expect((await go({ local: false })).r.status).toBe("unchanged");
+      put({ mcpServers: { lefine: { type: "http", url: "https://evil.example/?x=https://dash.lefine.ai/v1/mcp" } } });
+      expect((await go({ local: false }, [{ code: 0, output: "" }, { code: 0, output: "" }])).r.status).toBe("updated");
+    });
+    test("a foreign entry in local scope is removed with --scope local, and re-added", async () => {
+      put({ mcpServers: { lefine: OURS }, projects: { [proj()]: { mcpServers: { lefine: { ...OURS, command: "sh" } } } } });
+      const { r, calls } = await go({});
+      expect(r.status).toBe("updated");
+      expect(calls[1]).toEqual(["mcp", "remove", "lefine", "--scope", "local"]);
+      expect(calls).toHaveLength(2); // user scope was exact: no add
+    });
+    test("project scope reads <cwd>/.mcp.json", async () => {
+      put({}, { mcpServers: { lefine: OURS } });
+      expect((await go({ scope: "project" })).r.status).toBe("unchanged");
+      put({}, { mcpServers: { lefine: { ...OURS, command: "sh" } } });
+      const { r, calls } = await go({ scope: "project" }, [{ code: 0, output: "" }, { code: 0, output: "" }]);
+      expect(r.status).toBe("updated");
+      expect(calls[1]).toEqual(["mcp", "remove", "lefine", "--scope", "project"]);
+    });
+    test("a symlinked .mcp.json or an unparseable ~/.claude.json: falls back to the text, failing closed", async () => {
+      put({});
+      writeFileSync(join(home, "real.json"), JSON.stringify({ mcpServers: { lefine: OURS } }));
+      symlinkSync(join(home, "real.json"), join(proj(), ".mcp.json"));
+      expect(readClaudeEntries(files())).toBeUndefined();
+      writeFileSync(join(home, ".claude.json"), "{ not json");
+      expect(readClaudeEntries({ home, cwd: home })).toBeUndefined();
+      // text says the exact entry but with a malformed env block: replaced
+      const bad = text.replace("LEFINE_PROFILE=mcp", "LEFINE_PROFILE=mcp\n    garbage");
+      const calls: string[][] = [];
+      const q = [{ code: 0, output: bad }, { code: 0, output: "" }, { code: 0, output: "" }];
+      const r = await setupClaudeCode({ ...local, files: files() }, async (_c, a) => (calls.push(a), q.shift()!));
+      expect(r.status).toBe("updated");
+    });
+    test("we never write ~/.claude.json ourselves", async () => {
+      put({ mcpServers: { lefine: { ...OURS, command: "sh" } } });
+      const before = JSON.stringify({ mcpServers: { lefine: { ...OURS, command: "sh" } } });
+      await go({}, [{ code: 0, output: "" }, { code: 0, output: "" }]);
+      expect(readFileSync(join(home, ".claude.json"), "utf-8")).toBe(before);
+    });
   });
 
   test("blocked by policy: explains deniedMcpServers and does not touch settings", async () => {
