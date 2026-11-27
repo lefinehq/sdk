@@ -28,18 +28,26 @@ export interface LefineCredentials {
 const configDir = () => process.env.LEFINE_HOME || join(homedir(), ".lefine");
 export const credentialsPath = () => join(configDir(), "credentials.json");
 
-export function saveCredentials(creds: LefineCredentials): void {
-  const dir = configDir();
+/** A profile is a named copy of credentials.json in ~/.lefine/profiles/<name>.json. `LEFINE_PROFILE=<name>` selects it. */
+export const PROFILE_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
+export function profilePath(name: string): string {
+  if (!PROFILE_NAME.test(name)) throw new Error(`"${name}" is not a valid profile name (letters, digits, . _ -).`);
+  return join(configDir(), "profiles", `${name}.json`);
+}
+export const profileExists = (name: string): boolean => existsSync(profilePath(name));
+
+export function saveCredentials(creds: LefineCredentials, profile?: string): void {
+  const dir = profile ? join(configDir(), "profiles") : configDir();
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
-  const file = credentialsPath();
+  const file = profile ? profilePath(profile) : credentialsPath();
   // `mode` only applies when the file is created; chmod covers an existing looser one.
   writeFileSync(file, JSON.stringify(creds, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
   chmodSync(file, 0o600);
 }
 
-export function loadCredentials(): LefineCredentials | null {
-  const file = credentialsPath();
+export function loadCredentials(profile: string | undefined = process.env.LEFINE_PROFILE || undefined): LefineCredentials | null {
+  const file = profile ? profilePath(profile) : credentialsPath();
   if (!existsSync(file)) return null;
   try {
     const parsed = JSON.parse(readFileSync(file, "utf-8")) as Partial<LefineCredentials>;

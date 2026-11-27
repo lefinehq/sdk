@@ -1,5 +1,13 @@
 # @lefine/cli
 
+## 0.10.0
+
+### Minor Changes
+
+- `npx lefine setup` (alias `npx lefine mcp install`) adds Lefine's MCP server to the AI apps on the machine in one command: Claude Code (`claude mcp add --transport http --scope user`), Cursor and VS Code (one `lefine` entry merged into their `mcp.json`, other servers kept, one backup), and Claude Desktop (Connectors, or `--local`). It adds the remote server (`https://dash.lefine.ai/v1/mcp`, OAuth in the app, no key stored); `--local` adds `npx -y lefine mcp` after a device login saved as the profile `mcp`. `--client`, `--yes` and `--print` (show the config, write nothing). If Claude Code says "blocked by enterprise policy" it points at `deniedMcpServers` in `~/.claude/settings.json`; it never edits your settings.
+- Profiles: `lefine login --profile <name>` saves the key to `~/.lefine/profiles/<name>.json`, and `LEFINE_PROFILE=<name>` selects it. Your main login is not touched.
+- `lefine mcp` run by hand in a terminal prints a two-line hint on stderr (it is the server an AI app starts, and waits for that app) instead of looking frozen.
+
 ## 0.9.0
 
 ### Minor Changes

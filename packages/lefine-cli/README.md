@@ -25,6 +25,7 @@ The CLI prints a short code and a link, and tries to open your browser. Open the
 - `lefine login --no-browser` prints the link and does not try to open it.
 - `lefine login --token lfn_...` saves an access key you created in Settings, API keys.
 - `lefine login --api-url <url>` signs in to another server.
+- `lefine login --profile <name>` saves the key as a separate profile; use it with `LEFINE_PROFILE=<name>`.
 - `lefine whoami` shows who you are, the workspace, and what the key may do.
 - `lefine logout` removes the saved key from this machine.
 
@@ -190,9 +191,20 @@ Lets a GitHub repository sign in to the app from GitHub Actions with no stored s
 ## MCP
 
 ```sh
+npx lefine setup
+```
+Adds Lefine to the AI apps on this machine: Claude Code, Cursor, Claude Desktop and VS Code. It looks for them, asks which to set up (`--yes` takes all found, `--client claude-code|cursor|claude-desktop|vscode` names one), and adds the remote server `https://dash.lefine.ai/v1/mcp`. Then open the app and approve Lefine when it asks; you pick the workspace there, and no key is stored. `lefine mcp install` does the same.
+
+- Claude Code: runs `claude mcp add --transport http --scope user lefine <url>`. If it says "blocked by enterprise policy", look for `lefine` in `deniedMcpServers` in `~/.claude/settings.json` (or a policy from your admin) and remove it. Setup never edits your settings.
+- Cursor, VS Code: merges one `lefine` entry into `~/.cursor/mcp.json` or VS Code's user `mcp.json`. Your other servers stay, and the file is copied once to `<file>.lefine-backup`. A file with comments is left alone.
+- Claude Desktop: remote servers are added in the app (Settings > Connectors > Add custom connector), because its config file only starts local servers. `--local` writes it there.
+- `--local` adds the stdio server (`npx -y lefine mcp`) instead. It signs in first (browser device code) and saves the key as the profile `mcp` (`~/.lefine/profiles/mcp.json`), selected by `LEFINE_PROFILE=mcp` in the app's config, so the key is not in the config file. Your own login stays as it is.
+- `--print` shows the config for each app and changes nothing.
+
+```sh
 lefine mcp
 ```
-Runs Lefine as a local MCP server over stdio, for Claude Desktop and IDEs. Remote clients can use `https://dash.lefine.ai/v1/mcp`.
+The local MCP server itself (stdio). An AI app starts it; run by hand in a terminal it prints a hint and waits.
 
 ## CI
 
@@ -223,6 +235,7 @@ Do not run `lefine login` in CI. Create an access key in Settings, API keys, sto
 | `--api-url`, `LEFINE_API_URL` | `https://dash.lefine.ai` |
 | `--cdn-url`, `LEFINE_CDN_URL` (pull) | `https://cdn.lefine.ai` |
 | `LEFINE_TOKEN` | the key saved by `lefine login` |
+| `LEFINE_PROFILE` | use `~/.lefine/profiles/<name>.json` (made by `lefine login --profile <name>`) instead of your main login |
 | `LEFINE_HOME` | `~/.lefine` |
 
 The CLI does not read these from `.env` files in your project, so a cloned repository cannot point your key at another server.

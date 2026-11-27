@@ -17,6 +17,7 @@ import {
 import {
   clearCredentials,
   credentialsPath,
+  profilePath,
   resolveApiUrl,
   resolveLefineAuth,
   saveCredentials,
@@ -26,6 +27,8 @@ export interface GlobalOptions {
   apiUrl?: string;
   token?: string;
   json?: boolean;
+  /** Save to ~/.lefine/profiles/<name>.json instead of credentials.json. */
+  profile?: string;
 }
 
 /** Print an error the way every lefine command does, then exit 1. */
@@ -111,7 +114,7 @@ export async function loginCommand(options: LoginOptions, deps: LoginDeps = {}):
         workspace: { id: me.workspace.id, slug: me.workspace.slug, name: me.workspace.name },
         scopes: me.scopes,
         savedAt: new Date().toISOString(),
-      });
+      }, options.profile);
       out(options.json, { workspace: me.workspace, scopes: me.scopes }, () =>
         console.log(`  ${green("✓")} Signed in to ${bold(safeText(me.workspace.name))} (${safeText(me.workspace.slug)}).`),
       );
@@ -162,12 +165,12 @@ export async function loginCommand(options: LoginOptions, deps: LoginDeps = {}):
       workspace: granted.workspace,
       scopes: granted.scopes,
       savedAt: new Date().toISOString(),
-    });
+    }, options.profile);
     out(options.json, { workspace: granted.workspace, scopes: granted.scopes }, () => {
       console.log();
       console.log(`  ${green("✓")} Signed in to ${bold(safeText(granted!.workspace.name))} (${safeText(granted!.workspace.slug)}).`);
       console.log(dim(`  Access: ${safeText(granted!.scopes.join(", "))}`));
-      console.log(dim(`  Saved to ${credentialsPath()}`));
+      console.log(dim(`  Saved to ${options.profile ? profilePath(options.profile) : credentialsPath()}`));
     });
   } catch (err) {
     fail(err, options.json);

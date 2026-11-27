@@ -17,6 +17,7 @@ import { contentPushCommand } from "./lefine/content-push.js";
 import { initCommand } from "./lefine/init-command.js";
 import { runBridge } from "./lefine/mcp-bridge.js";
 import { migrateCommand } from "./lefine/migrate.js";
+import { MCP_HINT, setupCommand, type SetupOptions } from "./lefine/setup-command.js";
 
 import {
   stringsCheckCommand,
@@ -49,6 +50,7 @@ program
   .description("Sign in through the browser (device code, works over SSH)")
   .option("--token <key>", "Use an access key (lfn_...) instead of the browser")
   .option("--no-browser", "Do not try to open the browser")
+  .option("--profile <name>", "Save the key as ~/.lefine/profiles/<name>.json (select it with LEFINE_PROFILE=<name>), not as your main login")
   .option("--api-url <url>", "API origin (default: LEFINE_API_URL or https://dash.lefine.ai)")
   .option("--json", "Machine-readable output")
   .action((options) => loginCommand(options));
@@ -293,19 +295,41 @@ program
   .option("--lefine-import <path>", "Where your lefine.ts is imported from (default: @/lefine)")
   .action((dir, options) => migrateCommand(dir, options));
 
-program
-  .command("mcp")
-  .description("Lefine as a local MCP server (stdio) for Claude Desktop and IDEs; remote clients can use https://dash.lefine.ai/v1/mcp")
-  .action(async () => {
-    const found = resolveLefineAuth({});
-    if (!found) process.stderr.write("lefine mcp: not signed in. Run `npx lefine login` or set LEFINE_TOKEN.\n");
-    await runBridge(process.stdin, {
-      auth: found ? { token: found.token, apiUrl: found.apiUrl } : null,
-      fetch,
-      write: (line) => process.stdout.write(`${line}\n`),
-      log: (line) => process.stderr.write(`${line}\n`),
-      clientVersion: pkg.version,
+const addSetupOptions = (cmd: Command): Command =>
+  cmd
+    .option("--client <name...>", "Set up only this app: claude-code, cursor, claude-desktop, vscode (repeat or comma-separate)")
+    .option("-y, --yes", "Set up every app found, without asking")
+    .option("--local", "Add the local server (npx -y lefine mcp) with a saved key, instead of the remote one with OAuth")
+    .option("--print", "Show the config for each app, change nothing")
+    .option("--api-url <url>", "API origin (default: LEFINE_API_URL or https://dash.lefine.ai)")
+    .action(async (options: SetupOptions) => {
+      process.exitCode = await setupCommand(options);
     });
+
+addSetupOptions(
+  program
+    .command("setup")
+    .description("Add Lefine to your AI apps (Claude Code, Cursor, Claude Desktop, VS Code) in one command"),
+);
+
+const mcp = program
+  .command("mcp")
+  .description("Lefine as a local MCP server (stdio), started by an AI app. To add Lefine to your apps: lefine setup");
+
+addSetupOptions(mcp.command("install").description("Same as `lefine setup`"));
+
+mcp.action(async () => {
+  const found = resolveLefineAuth({});
+  // Run by hand, the server waits for an app on stdin and looks stuck: say what it is, on stderr (stdout is MCP only).
+  if (process.stdin.isTTY) process.stderr.write(`${MCP_HINT}\n`);
+  if (!found) process.stderr.write("lefine mcp: not signed in. Run `npx lefine login` or set LEFINE_TOKEN.\n");
+  await runBridge(process.stdin, {
+    auth: found ? { token: found.token, apiUrl: found.apiUrl } : null,
+    fetch,
+    write: (line) => process.stdout.write(`${line}\n`),
+    log: (line) => process.stderr.write(`${line}\n`),
+    clientVersion: pkg.version,
   });
+});
 
 program.parse();
