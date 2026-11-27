@@ -3,11 +3,19 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { digests, distTag, privateDeps, promisedFiles, publishOrder, readPackages, sha256sums, staleWorkspaceRanges } from "../../scripts/release.ts";
+import { digests, distTag, isLefine, privateDeps, promisedFiles, publishOrder, readPackages, sha256sums, staleWorkspaceRanges } from "../../scripts/release.ts";
 
 const REPO = resolve(__dirname, "../..");
 
 describe("scripts/release.ts", () => {
+  it("releases only Lefine packages by default (lefine, @lefine/*), never @better-i18n/*", () => {
+    const names = readPackages(REPO).filter(isLefine).map((p) => p.name).sort();
+    expect(names).toEqual(["@lefine/cli", "@lefine/mcp", "lefine"]);
+    expect(isLefine({ name: "@better-i18n/core" })).toBe(false);
+    expect(isLefine({ name: "lefine-evil" })).toBe(false);
+    expect(isLefine({ name: "@lefinex/a" })).toBe(false);
+  });
+
   it("publishes a package after the workspace packages it depends on", () => {
     const order = publishOrder(readPackages(REPO)).map((p) => p.name);
     for (const dependent of ["@better-i18n/next", "@better-i18n/use-intl", "@better-i18n/expo", "@better-i18n/remix", "@better-i18n/server", "@better-i18n/vite"]) {

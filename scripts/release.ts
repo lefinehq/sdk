@@ -18,7 +18,10 @@
  *      sha256, integrity, result). The Release workflow uploads that folder as an artifact, so the
  *      digest of what went to npm is on record. Without `--out` a temp folder is used and removed.
  *
- * Usage: bun scripts/release.ts [--dry-run] [--out <dir>]. Exits 1 if any package failed; the rest still go out.
+ * Only Lefine packages (`lefine`, `@lefine/*`) are considered. The @better-i18n/* packages live in this
+ * monorepo too but are released separately; pass --include-better to release them from here.
+ *
+ * Usage: bun scripts/release.ts [--dry-run] [--include-better] [--out <dir>]. Exits 1 if any package failed; the rest still go out.
  */
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -29,6 +32,7 @@ import { fileURLToPath } from "node:url";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const DRY = process.argv.includes("--dry-run");
+const INCLUDE_BETTER = process.argv.includes("--include-better");
 const OUT_ARG = process.argv.indexOf("--out");
 const OUT = OUT_ARG > 0 ? process.argv[OUT_ARG + 1] : undefined;
 
@@ -51,6 +55,13 @@ export function readPackages(root: string, all = false): Pkg[] {
     .filter((d) => existsSync(join(dir, d, "package.json")))
     .map((d) => ({ dir: join(dir, d), ...JSON.parse(readFileSync(join(dir, d, "package.json"), "utf-8")) }) as Pkg)
     .filter((p) => all || !p.private);
+}
+
+/** Packages this script releases by default: the unscoped `lefine` and everything under `@lefine/`. */
+export const LEFINE_PACKAGE = /^(lefine|@lefine\/.+)$/;
+
+export function isLefine(p: Pick<Pkg, "name">): boolean {
+  return LEFINE_PACKAGE.test(p.name);
 }
 
 /** Dependencies on a private workspace package: npm would ship a package nobody can install. */
@@ -169,7 +180,10 @@ async function main(): Promise<void> {
   const out = OUT ? resolve(OUT) : mkdtempSync(join(tmpdir(), "release-"));
   mkdirSync(out, { recursive: true });
   const everything = readPackages(REPO, true);
-  for (const p of publishOrder(readPackages(REPO))) {
+  const candidates = readPackages(REPO).filter((p) => INCLUDE_BETTER || isLefine(p));
+  const ignored = readPackages(REPO).length - candidates.length;
+  if (ignored > 0) console.log(`ignored  ${ignored} non-Lefine package(s) (pass --include-better to release them)`);
+  for (const p of publishOrder(candidates)) {
     const id = `${p.name}@${p.version}`;
     if (onNpm(p.name, p.version)) {
       console.log(`skip     ${id} (on npm)`);
