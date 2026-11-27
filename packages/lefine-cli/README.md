@@ -193,13 +193,27 @@ Lets a GitHub repository sign in to the app from GitHub Actions with no stored s
 ```sh
 npx lefine setup
 ```
-Adds Lefine to the AI apps on this machine: Claude Code, Cursor, Claude Desktop and VS Code. It looks for them, asks which to set up (`--yes` takes all found, `--client claude-code|cursor|claude-desktop|vscode` names one), and adds the remote server `https://dash.lefine.ai/v1/mcp`. Then open the app and approve Lefine when it asks; you pick the workspace there, and no key is stored. `lefine mcp install` does the same.
+Adds Lefine to the AI apps on this machine. It asks which apps (the ones it finds are pre-selected), then "Install with defaults" (for you only, can edit, asks before it publishes) or "Customize" (read-only, one project folder). It adds the remote server `https://dash.lefine.ai/v1/mcp`, checks that the server answers, and prints the one click each app needs to sign in (Claude Code: `/mcp`, pick lefine, Authenticate; Cursor: Settings > MCP > Connect; VS Code: Start). You pick the workspace in the browser; no key is stored. `lefine mcp install` and `npx @lefine/mcp` do the same.
 
-- Claude Code: runs `claude mcp add --transport http --scope user lefine <url>`. If it says "blocked by enterprise policy", look for `lefine` in `deniedMcpServers` in `~/.claude/settings.json` (or a policy from your admin) and remove it. Setup never edits your settings.
-- Cursor, VS Code: merges one `lefine` entry into `~/.cursor/mcp.json` or VS Code's user `mcp.json`. Your other servers stay, and the file is copied once to `<file>.lefine-backup`. A file with comments is left alone.
-- Claude Desktop: remote servers are added in the app (Settings > Connectors > Add custom connector), because its config file only starts local servers. `--local` writes it there.
+Apps: Claude Code, Cursor, VS Code, Windsurf, Codex, Gemini CLI, Zed. Claude Desktop and ChatGPT take remote servers in their own settings (Settings > Connectors > Add custom connector), so for them setup prints the steps and writes no file.
+
+| Flag | What it does |
+|---|---|
+| `--yes` | Every app found, no questions |
+| `--client <name...>` | Only these: `claude-code`, `cursor`, `vscode`, `windsurf`, `codex`, `gemini-cli`, `zed`, `claude-desktop`, `chatgpt` |
+| `--readonly` | Read-only: the URL gets `?level=read` |
+| `--project` | Write the config for this folder only |
+| `--list` | Where Lefine is set up |
+| `--remove` | Take it out again (no questions, no tour) |
+| `--doctor` | Old stdio `lefine` entries, a blocked `deniedMcpServers`, no `claude` command, server not reachable |
+| `--print` | Show the config for each app, change nothing |
+| `--no-backup`, `--no-check` | Skip the backup, skip the connection test |
+| `--json` | One JSON object with a `next` command. This is also the default without a terminal, and nothing then waits for a question |
+
+- Claude Code: runs `claude mcp add --transport http --scope user lefine <url>` (on Windows through the shell, because `claude` is often `claude.cmd`). If it says "blocked by enterprise policy", look for `lefine` in `deniedMcpServers` in `~/.claude/settings.json` (or a policy from your admin) and remove it. Setup never edits your settings.
+- The other apps: one `lefine` entry is merged into each app's MCP config (paths and formats come from [add-mcp](https://github.com/neon-solutions/add-mcp), Apache-2.0). Other servers stay; comments in a JSON file stay; a file that is not valid JSON is left alone. The file is copied once to `<file>.lefine-backup`, readable by you only (the backup may hold other servers' keys).
 - `--local` adds the stdio server (`npx -y lefine mcp`) instead. It signs in first (browser device code) and saves the key as the profile `mcp` (`~/.lefine/profiles/mcp.json`), selected by `LEFINE_PROFILE=mcp` in the app's config, so the key is not in the config file. Your own login stays as it is.
-- `--print` shows the config for each app and changes nothing.
+- The connection test sends `initialize` without a key; a Lefine server answers 401 with `resource_metadata`, which counts as reachable.
 
 ```sh
 lefine mcp

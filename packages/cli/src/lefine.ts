@@ -297,10 +297,18 @@ program
 
 const addSetupOptions = (cmd: Command): Command =>
   cmd
-    .option("--client <name...>", "Set up only this app: claude-code, cursor, claude-desktop, vscode (repeat or comma-separate)")
+    .option("--client <name...>", "Only these apps: claude-code, cursor, vscode, windsurf, codex, gemini-cli, zed, claude-desktop, chatgpt (repeat or comma-separate)")
     .option("-y, --yes", "Set up every app found, without asking")
+    .option("--readonly", "Read-only access: the AI can look, not change (adds ?level=read to the URL)")
+    .option("--project", "Write the config for this project folder only, not for your user")
     .option("--local", "Add the local server (npx -y lefine mcp) with a saved key, instead of the remote one with OAuth")
+    .option("--list", "Show where Lefine is set up")
+    .option("--remove", "Take Lefine out of your AI apps")
+    .option("--doctor", "Find problems: old entries, a blocked server, no claude command, server not reachable")
     .option("--print", "Show the config for each app, change nothing")
+    .option("--json", "Print one JSON object (the default without a terminal) with a `next` command")
+    .option("--no-backup", "Do not back up a config file before changing it")
+    .option("--no-check", "Skip the connection test")
     .option("--api-url <url>", "API origin (default: LEFINE_API_URL or https://dash.lefine.ai)")
     .action(async (options: SetupOptions) => {
       process.exitCode = await setupCommand(options);
@@ -309,7 +317,7 @@ const addSetupOptions = (cmd: Command): Command =>
 addSetupOptions(
   program
     .command("setup")
-    .description("Add Lefine to your AI apps (Claude Code, Cursor, Claude Desktop, VS Code) in one command"),
+    .description("Add Lefine to your AI apps (Claude Code, Cursor, VS Code, Windsurf, Codex, Gemini CLI, Zed, Claude Desktop, ChatGPT)"),
 );
 
 const mcp = program

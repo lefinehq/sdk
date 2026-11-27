@@ -3,11 +3,23 @@
 // TypeScript stays outside (an optional peer, loaded only by `lefine strings check`).
 // `bun scripts/build-cli.ts [outdir]`; default dist/.
 import { chmodSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const outdir = process.argv[2] ?? new URL("../dist", import.meta.url).pathname;
 
+// jsonc-parser's package `main` is a UMD file with computed requires ("./impl/format"); bundled, it breaks at
+// run time. Its ES module build bundles cleanly, so every import of it (ours and add-mcp's) points there.
+const jsoncEsm = {
+  name: "jsonc-parser-esm",
+  setup(build: import("bun").PluginBuilder) {
+    build.onResolve({ filter: /^jsonc-parser$/ }, () => ({
+      path: join(dirname(Bun.resolveSync("jsonc-parser/package.json", new URL("../../cli", import.meta.url).pathname)), "lib", "esm", "main.js"),
+    }));
+  },
+};
+
 const result = await Bun.build({
+  plugins: [jsoncEsm],
   entrypoints: [new URL("../../cli/src/lefine.ts", import.meta.url).pathname],
   outdir,
   target: "node",

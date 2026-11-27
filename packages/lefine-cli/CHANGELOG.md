@@ -1,5 +1,13 @@
 # @lefine/cli
 
+## 0.11.0
+
+### Minor Changes
+
+- `npx lefine setup` is rebuilt as a wizard (@clack/prompts) and covers more apps. It lists the AI apps it finds (pre-selected) and the others you can still pick: Claude Code, Cursor, VS Code, Windsurf, Codex, Gemini CLI, Zed, and Claude Desktop / ChatGPT as steps. "Install with defaults" is one Enter (for you only, can edit, asks before it publishes); "Customize" offers read-only and one project folder. Every app gets a line with the file it changed, then a connection test (a key-less `initialize`; 401 with `resource_metadata` means reachable), then the one click each app needs to sign in (Claude Code: `/mcp`, lefine, Authenticate; Cursor: Settings > MCP > Connect; VS Code: Start; Codex: `codex mcp login lefine`), a "Try:" sentence and `npx lefine setup --remove`.
+- New flags: `--readonly` (the URL gets `?level=read`), `--project`, `--list`, `--remove`, `--doctor` (old stdio `lefine` entries, an entry with another URL, `deniedMcpServers`, no `claude` command, server not reachable), `--json`, `--no-backup`, `--no-check`. Without a terminal it prints one JSON object with a `next` command and never waits for a question. An old stdio `lefine` entry, or one with another URL, is now replaced instead of left stale.
+- Config paths and formats (JSON, TOML, YAML; macOS, Linux and Windows) come from `add-mcp` 2.6.1 (Apache-2.0, neon-solutions/add-mcp); Claude Code stays on `claude mcp add`, run through the shell on Windows (`claude.cmd`). Claude Desktop's `claude_desktop_config.json` is never written for the remote server (it only starts local ones): setup prints Settings > Connectors > Add custom connector. Backups (`<file>.lefine-backup`) are now owner-only (0600); a config file that is not valid JSON is left as it is (comments are fine).
+
 ## 0.10.0
 
 ### Minor Changes

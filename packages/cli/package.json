@@ -44,9 +44,12 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
+    "@clack/prompts": "^0.9.1",
     "@inquirer/prompts": "^7.2.0",
+    "add-mcp": "2.6.1",
     "commander": "^12.1.0",
     "glob": "^11.0.0",
+    "jsonc-parser": "^3.3.1",
     "ora": "^8.1.1",
     "typescript": "~5.9.2"
   },
