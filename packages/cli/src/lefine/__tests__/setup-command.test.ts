@@ -7,6 +7,7 @@ import {
   checkConnection,
   claudeAddArgs,
   detectClients,
+  parseClaudeGet,
   parseClients,
   printSnippets,
   remoteUrl,
@@ -53,6 +54,7 @@ function fakeOps(detected: ClientId[] = [], stored: Installed[] = []) {
   const removed: string[] = [];
   const ops: ClientOps = {
     load: async () => {},
+    urlField: () => "url",
     detect: async () => detected,
     find: async (_cwd, clients) => stored.filter((s) => !clients || clients.includes(s.client)),
     write: (client, entry, scope, _cwd, backup) => (writes.push({ client, entry, scope, backup }), { ok: true, file: join(home, `${client}.json`), backup: backup ? join(home, `${client}.json.lefine-backup`) : undefined }),
@@ -139,19 +141,41 @@ describe("Claude Code", () => {
     expect(calls[1]).toEqual(["mcp", "add", "--transport", "http", "--scope", "user", "lefine", "https://dash.lefine.ai/v1/mcp"]);
   });
   test("already added with the same URL: no second add", async () => {
-    const { calls, run } = runner([{ code: 0, output: "lefine:\n  Type: http\n  URL: https://dash.lefine.ai/v1/mcp" }]);
+    const { calls, run } = runner([{ code: 0, output: "lefine:\n  Scope: User config (available in all your projects)\n  Type: http\n  URL: https://dash.lefine.ai/v1/mcp" }]);
     expect((await setupClaudeCode(o, run)).status).toBe("unchanged");
     expect(calls).toHaveLength(1);
   });
   test("an old stdio entry is replaced, not left stale", async () => {
-    const { calls, run } = runner([{ code: 0, output: "lefine:\n  Type: stdio\n  Command: npx" }, { code: 0, output: "" }, { code: 0, output: "" }]);
+    const { calls, run } = runner([{ code: 0, output: "lefine:\n  Scope: User config (available in all your projects)\n  Type: stdio\n  Command: npx" }, { code: 0, output: "" }, { code: 0, output: "" }]);
     expect((await setupClaudeCode(o, run)).status).toBe("updated");
     expect(calls.map((c) => c[1])).toEqual(["get", "remove", "add"]);
   });
   test("a read-only entry is replaced when the full level is wanted", async () => {
-    const { calls, run } = runner([{ code: 0, output: "URL: https://dash.lefine.ai/v1/mcp?level=read" }, { code: 0, output: "" }, { code: 0, output: "" }]);
+    const { calls, run } = runner([{ code: 0, output: "lefine:\n  Scope: User config\n  Type: http\n  URL: https://dash.lefine.ai/v1/mcp?level=read" }, { code: 0, output: "" }, { code: 0, output: "" }]);
     expect((await setupClaudeCode(o, run)).status).toBe("updated");
     expect(calls).toHaveLength(3);
+  });
+  test("the right URL in another scope is not enough: replaced where it lives", async () => {
+    const { calls, run } = runner([{ code: 0, output: "lefine:\n  Scope: Project config (shared via .mcp.json)\n  Type: http\n  URL: https://dash.lefine.ai/v1/mcp" }, { code: 0, output: "" }, { code: 0, output: "" }]);
+    expect((await setupClaudeCode(o, run)).status).toBe("updated");
+    expect(calls[1]).toEqual(["mcp", "remove", "lefine", "--scope", "project"]);
+    expect(calls[2]).toContain("user");
+  });
+  test("spoofed output: the URL only inside another line or a longer URL is foreign", async () => {
+    for (const output of [
+      "lefine:\n  Scope: User config\n  Type: http\n  URL: https://evil.example/?x=https://dash.lefine.ai/v1/mcp",
+      "lefine:\n  Scope: User config\n  Type: http\n  URL: https://dash.lefine.ai/v1/mcp/../../evil",
+      "lefine:\n  Scope: User config\n  Type: http\n  URL: https://evil.example\n  Note: https://dash.lefine.ai/v1/mcp",
+      "lefine:\n  Scope: User config\n  Type: http\n  URL: http://dash.lefine.ai/v1/mcp",
+    ]) {
+      const { calls, run } = runner([{ code: 0, output }, { code: 0, output: "" }, { code: 0, output: "" }]);
+      expect((await setupClaudeCode(o, run)).status).toBe("updated");
+      expect(calls.map((c) => c[1])).toEqual(["get", "remove", "add"]);
+    }
+  });
+  test("parseClaudeGet reads whole lines", () => {
+    expect(parseClaudeGet("lefine:\n  Scope: Local config (private)\n  Type: http\n  URL: https://a.test/x")).toEqual({ scope: "local", type: "http", url: "https://a.test/x" });
+    expect(parseClaudeGet("nothing useful")).toEqual({ scope: undefined, type: undefined, url: undefined });
   });
   test("blocked by policy: explains deniedMcpServers and does not touch settings", async () => {
     const { run } = runner([{ code: 1, output: "" }, { code: 1, output: 'MCP server "lefine" is blocked by enterprise policy' }]);
@@ -319,6 +343,23 @@ describe("setup without a terminal (JSON)", () => {
     expect(writes).toEqual([]);
     expect(report().results[0]!.status).toBe("unchanged");
   });
+  test("a spoofed entry is foreign and replaced: URL inside a longer URL, URL in another field, http, other path", async () => {
+    const spoofs: Record<string, unknown>[] = [
+      { url: "https://evil.example/?x=https://dash.lefine.ai/v1/mcp" },
+      { serverUrl: "https://dash.lefine.ai/v1/mcp", url: "https://evil.example/" },
+      { note: "https://dash.lefine.ai/v1/mcp" },
+      { url: "http://dash.lefine.ai/v1/mcp" },
+      { url: "https://dash.lefine.ai/v1/mcp/extra" },
+      { url: "https://dash.lefine.ai/v1/mcp?level=read" }, // full access wanted, a read-only entry is not the same
+    ];
+    for (const config of spoofs) {
+      const { ops, writes } = fakeOps([], [{ client: "cursor", scope: "user", file: join(home, "c.json"), config }]);
+      lines = [];
+      await setupCommand({ client: ["cursor"], check: false }, { env, ops, log, tty: false });
+      expect(writes).toHaveLength(1);
+      expect(report().results[0]!.status).toBe("updated");
+    }
+  });
   test("an old stdio entry is replaced", async () => {
     const stored: Installed[] = [{ client: "cursor", scope: "user", file: join(home, "c.json"), config: { command: "npx", args: ["-y", "@lefine/mcp"] } }];
     const { ops, writes } = fakeOps([], stored);
@@ -368,6 +409,20 @@ describe("--list, --remove, --doctor, --print", () => {
     expect(report().next).toContain("npx lefine setup --yes");
   });
 
+  test("--doctor flags spoofed entries: only the real URL field, matched exactly, counts", async () => {
+    const mk = (client: ClientId, config: Record<string, unknown>): Installed => ({ client, scope: "user", file: `/h/${client}.json`, config });
+    const rows = [
+      mk("cursor", { url: "https://evil.example/?x=https://dash.lefine.ai/v1/mcp" }),
+      mk("windsurf", { note: "https://dash.lefine.ai/v1/mcp" }),
+      mk("zed", { url: "https://dash.lefine.ai/v1/mcp/other" }),
+      mk("vscode", { url: "https://dash.lefine.ai/v1/mcp?level=read" }), // a real read-only entry is fine
+    ];
+    await setupCommand({ doctor: true, check: false }, { env, ops: fakeOps([], rows).ops, log, tty: false, settingsFiles: [] });
+    const f = report().findings!;
+    for (const c of ["Cursor", "Windsurf", "Zed"]) expect(f.some((x) => x.level === "problem" && x.message.includes(c))).toBe(true);
+    expect(f.some((x) => x.level === "ok" && x.message.includes("VS Code"))).toBe(true);
+  });
+
   test("--doctor with a healthy setup exits 0; an unreachable server is a problem", async () => {
     fakeClaude();
     expect(await setupCommand({ doctor: true }, { env, ops: fakeOps([], [good]).ops, log, tty: false, fetch: live, settingsFiles: [], run: async () => ({ code: 1, output: "" }) })).toBe(0);
@@ -388,5 +443,14 @@ describe("--list, --remove, --doctor, --print", () => {
     expect(text).toContain("codex mcp add lefine --url https://dash.lefine.ai/v1/mcp");
     expect(text).toContain('"mcpServers"');
     expect(printSnippets({ local: true, readonly: false }, fakeOps().ops)).resolves.toContain("npx lefine login --profile mcp");
+  });
+});
+
+describe("unsafePath", () => {
+  test("a ../ path leaving the project folder is refused; a path inside is fine", async () => {
+    const { unsafePath } = await import("../setup-clients.js");
+    mkdirSync(join(home, "proj"));
+    expect(unsafePath(join(home, "proj", "..", "evil.json"), join(home, "proj"))).toContain("outside the project folder");
+    expect(unsafePath(join(home, "proj", ".cursor", "mcp.json"), join(home, "proj"))).toBeUndefined();
   });
 });

@@ -31,7 +31,8 @@ import {
   type Installed,
   INSTRUCTIONS,
   isStdio,
-  entryUrl,
+  sameUrl,
+  storedUrl,
   isWritable,
   LABEL,
   MCP_NAME,
@@ -151,6 +152,14 @@ export interface ClaudeOptions {
   scope: Scope;
 }
 
+/** What `claude mcp get lefine` says: its `Scope:`, `Type:` and `URL:` lines (each read as a whole line, not searched for). */
+export function parseClaudeGet(output: string): { scope?: "user" | "project" | "local"; type?: string; url?: string } {
+  const line = (key: string) => output.match(new RegExp(`^\\s*${key}:\\s*(.+?)\\s*$`, "im"))?.[1];
+  const scopeText = line("Scope");
+  const scope = scopeText ? (/^user/i.test(scopeText) ? "user" : /^project/i.test(scopeText) ? "project" : /^local/i.test(scopeText) ? "local" : undefined) : undefined;
+  return { scope, type: line("Type")?.toLowerCase(), url: line("URL") };
+}
+
 export async function setupClaudeCode(o: ClaudeOptions, run: Runner): Promise<ClientOutcome> {
   const client = "claude-code" as const;
   const where = o.scope === "project" ? "this project (.mcp.json)" : "your user (all projects)";
@@ -159,11 +168,12 @@ export async function setupClaudeCode(o: ClaudeOptions, run: Runner): Promise<Cl
   const got = await run("claude", ["mcp", "get", MCP_NAME]);
   let updated = false;
   if (got.code === 0) {
-    // Already there. Same URL: nothing to do. Anything else (an old stdio entry, another URL, another level): replace it.
-    if (want && got.output.includes(want) && !(o.readonly === false && got.output.includes(`${want}?level=read`))) {
-      return { client, status: "unchanged", detail: "already added", file };
-    }
-    await run("claude", ["mcp", "remove", MCP_NAME, "--scope", o.scope]);
+    // Already there. The same URL in the scope we were asked for: nothing to do. Anything else (an old stdio
+    // entry, another URL or level, another scope's entry): replace it, in the scope where it lives.
+    const have = parseClaudeGet(got.output);
+    const same = o.local ? have.type === "stdio" && /LEFINE_PROFILE/.test(got.output) : have.type !== "stdio" && sameUrl(have.url, want);
+    if (same && have.scope === o.scope) return { client, status: "unchanged", detail: "already added", file };
+    await run("claude", ["mcp", "remove", MCP_NAME, "--scope", have.scope ?? o.scope]);
     updated = true;
   }
   const added = await run("claude", claudeAddArgs(o.local, o.apiUrl, o.readonly, o.scope));
@@ -418,9 +428,8 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
     if (!onPath("claude", e) && !deps.run) return [];
     const got = await run("claude", ["mcp", "get", MCP_NAME]);
     if (got.code !== 0) return [];
-    const m = got.output.match(/https?:\/\/\S+/);
-    const stdio = /Type:\s*stdio/i.test(got.output);
-    return [{ client: "claude-code", scope: /Scope:\s*Project/i.test(got.output) ? "project" : "user", file: "claude mcp get lefine", config: stdio ? { command: "npx" } : { url: m ? m[0].replace(/[),.]+$/, "") : "" } }];
+    const have = parseClaudeGet(got.output);
+    return [{ client: "claude-code", scope: have.scope === "user" ? "user" : "project", file: "claude mcp get lefine", config: have.type === "stdio" ? { command: "npx" } : { url: have.url ?? "" } }];
   }
 
   async function allInstalled(clients?: ClientId[]): Promise<Installed[]> {
@@ -437,12 +446,12 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
 
   async function listAction(): Promise<number> {
     const rows = await allInstalled(wanted.length ? wanted : undefined);
-    report.installed = rows.map((r) => ({ client: r.client, scope: r.scope, file: r.file, url: entryUrl(r.config), stdio: isStdio(r.config) }));
+    report.installed = rows.map((r) => ({ client: r.client, scope: r.scope, file: r.file, url: storedUrl(ops.urlField(r.client), r.config), stdio: isStdio(r.config) }));
     report.next = rows.length ? "npx lefine setup --doctor" : "npx lefine setup";
     if (!json) {
       ui.intro(bold("Lefine in your AI apps"));
       if (rows.length === 0) say("Lefine is not set up in any app yet. Run: npx lefine setup");
-      for (const r of rows) say(`${green("✔")} ${bold(LABEL[r.client])}  ${dim(`${r.scope}, ${tidy(r.file)}`)}\n   ${entryUrl(r.config) ?? (isStdio(r.config) ? "local server (npx lefine mcp)" : "")}`);
+      for (const r of rows) say(`${green("✔")} ${bold(LABEL[r.client])}  ${dim(`${r.scope}, ${tidy(r.file)}`)}\n   ${storedUrl(ops.urlField(r.client), r.config) ?? (isStdio(r.config) ? "local server (npx lefine mcp)" : "")}`);
       ui.outro(dim(rows.length ? "Check them: npx lefine setup --doctor" : "Set up: npx lefine setup"));
     }
     return finish(0);
@@ -494,13 +503,15 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
     if (!onPath("claude", e)) findings.push({ level: "warn", client: "claude-code", message: "the `claude` command is not on your PATH, so Claude Code cannot be set up from here", fix: "Install Claude Code, or add its folder to PATH" });
     const rows = await allInstalled(wanted.length ? wanted : undefined);
     const base = remoteUrl(options.apiUrl).replace(/\?.*$/, "");
+    const accepted = options.readonly ? [remoteUrl(options.apiUrl, true)] : [remoteUrl(options.apiUrl), remoteUrl(options.apiUrl, true)];
     for (const r of rows) {
-      const u = entryUrl(r.config);
+      // Only the field this app really reads counts: a URL in another field, or inside a longer string, does not.
+      const u = storedUrl(ops.urlField(r.client), r.config);
       if (isStdio(r.config)) {
         findings.push({ level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) has an old local \`lefine\` entry that starts a program instead of using ${base}`, fix: "npx lefine setup --yes (it replaces the entry)" });
-      } else if (u && u.replace(/\?.*$/, "") !== base) {
-        findings.push({ level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) points \`lefine\` at ${u}, not ${base}`, fix: "npx lefine setup --yes (it replaces the entry)" });
-      } else findings.push({ level: "ok", client: r.client, message: `${LABEL[r.client]}: lefine points at ${u ?? base}` });
+      } else if (!u || !accepted.some((a) => sameUrl(u, a))) {
+        findings.push({ level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) ${u ? `points \`lefine\` at ${u}` : "has a `lefine` entry with no URL where the app reads it"}, not ${accepted.join(" or ")}`, fix: "npx lefine setup --yes (it replaces the entry)" });
+      } else findings.push({ level: "ok", client: r.client, message: `${LABEL[r.client]}: lefine points at ${u}` });
     }
     if (rows.length === 0) findings.push({ level: "warn", message: "Lefine is not set up in any app", fix: "npx lefine setup" });
     const settings = deps.settingsFiles ?? [join(e.home, ".claude", "settings.json"), join(e.home, ".claude", "settings.local.json"), ...MANAGED_SETTINGS];
@@ -663,7 +674,7 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
   async function writeClient(client: ClientId, entry: ServerEntry, sc: Scope): Promise<ClientOutcome> {
     // Read the current entry first: the same one is left alone (no rewrite, no backup), another one is replaced.
     const before = (await ops.find(cwd, [client])).find((r) => r.scope === sc);
-    if (before && entryUrl(before.config) === entry.url && isStdio(before.config) === (entry.command !== undefined)) {
+    if (before && (entry.command !== undefined ? isStdio(before.config) && JSON.stringify(before.config.args) === JSON.stringify(entry.args) : !isStdio(before.config) && sameUrl(storedUrl(ops.urlField(client), before.config), entry.url))) {
       return { client, status: "unchanged", detail: "already set up", file: before.file };
     }
     const r = ops.write(client, entry, sc, cwd, options.backup !== false);

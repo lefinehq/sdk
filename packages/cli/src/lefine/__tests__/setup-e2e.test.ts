@@ -5,7 +5,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -163,6 +163,87 @@ describe("write, merge, backup", () => {
     const r = await run(["setup", "--client", "claude-code", "--no-check"]);
     expect(r.code).toBe(0);
     expect(readFileSync(join(home, "claude.log"), "utf-8")).toContain(`mcp add --transport http --scope user lefine ${URL_()}`);
+  });
+});
+
+describe("symlinks and escapes", () => {
+  test("a symlinked config file is refused: nothing is written through it", async () => {
+    mkdirSync(join(home, ".cursor"));
+    const target = join(home, "precious.txt");
+    writeFileSync(target, "keep me");
+    symlinkSync(target, cursorFile());
+    const r = await run(["setup", "--client", "cursor", "--no-check"]);
+    expect(r.code).toBe(1);
+    expect(r.json.results[0].status).toBe("failed");
+    expect(r.json.results[0].detail).toContain("symbolic link");
+    expect(r.json.results[0].detail).toContain(cursorFile());
+    expect(readFileSync(target, "utf-8")).toBe("keep me");
+    expect(existsSync(`${cursorFile()}.lefine-backup`)).toBe(false);
+  });
+
+  test("a symlinked backup path is refused: the file it points to is not touched", async () => {
+    mkdirSync(join(home, ".cursor"));
+    writeFileSync(cursorFile(), "{}");
+    const victim = join(home, "victim.txt");
+    writeFileSync(victim, "do not overwrite");
+    symlinkSync(victim, `${cursorFile()}.lefine-backup`);
+    const r = await run(["setup", "--client", "cursor", "--no-check"]);
+    expect(r.code).toBe(1);
+    expect(r.json.results[0].detail).toContain("symbolic link");
+    expect(r.json.results[0].detail).toContain("lefine-backup");
+    expect(readFileSync(victim, "utf-8")).toBe("do not overwrite");
+    expect(readFileSync(cursorFile(), "utf-8")).toBe("{}");
+    expect(lstatSync(`${cursorFile()}.lefine-backup`).isSymbolicLink()).toBe(true);
+  });
+
+  test("--project: a linked folder that leaves the project is refused", async () => {
+    const proj = join(home, "proj");
+    const outside = join(home, "outside");
+    mkdirSync(proj);
+    mkdirSync(outside);
+    symlinkSync(outside, join(proj, ".cursor"));
+    const r = await run(["setup", "--client", "cursor", "--project", "--no-check"], {}, proj);
+    expect(r.code).toBe(1);
+    expect(r.json.results[0].detail).toContain("outside the project folder");
+    expect(existsSync(join(outside, "mcp.json"))).toBe(false);
+  });
+
+  test("--remove does not follow a symlinked config either", async () => {
+    mkdirSync(join(home, ".cursor"));
+    const target = join(home, "real.json");
+    writeFileSync(target, JSON.stringify({ mcpServers: { lefine: { url: URL_() } } }));
+    symlinkSync(target, cursorFile());
+    const r = await run(["setup", "--remove", "--client", "cursor"]);
+    expect(r.json.results[0].status).toBe("failed");
+    expect(read(target).mcpServers.lefine.url).toBe(URL_());
+  });
+
+  test("a regular backup is created O_EXCL with mode 0600 even when the config is 0644", async () => {
+    mkdirSync(join(home, ".cursor"));
+    writeFileSync(cursorFile(), "{}", { mode: 0o644 });
+    await run(["setup", "--client", "cursor", "--no-check"]);
+    expect(mode(`${cursorFile()}.lefine-backup`)).toBe(0o600);
+  });
+});
+
+describe("spoofed entries", () => {
+  test("a Cursor entry whose URL only CONTAINS ours is foreign and replaced", async () => {
+    mkdirSync(join(home, ".cursor"));
+    writeFileSync(cursorFile(), JSON.stringify({ mcpServers: { lefine: { url: `https://evil.example/?x=${URL_()}` } } }));
+    const r = await run(["setup", "--client", "cursor", "--no-check"]);
+    expect(r.json.results[0].status).toBe("updated");
+    expect(read(cursorFile()).mcpServers.lefine.url).toBe(URL_());
+  });
+  test("Windsurf: the right URL under `url` (not serverUrl) is foreign; doctor flags it", async () => {
+    const dir = join(home, ".codeium", "windsurf");
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, "mcp_config.json");
+    writeFileSync(file, JSON.stringify({ mcpServers: { lefine: { url: URL_() } } }));
+    const doc = await run(["setup", "--doctor", "--client", "windsurf", "--no-check"]);
+    expect((doc.json.findings as { level: string }[]).some((f) => f.level === "problem")).toBe(true);
+    const r = await run(["setup", "--client", "windsurf", "--no-check"]);
+    expect(r.json.results[0].status).toBe("updated");
+    expect(read(file).mcpServers.lefine.serverUrl).toBe(URL_());
   });
 });
 

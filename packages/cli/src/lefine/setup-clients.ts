@@ -9,7 +9,8 @@
  * `add-mcp` fixes the home folder when it loads, so it is imported lazily, on first use.
  */
 
-import { chmodSync, copyFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
+import { closeSync, existsSync, lstatSync, openSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { homedir } from "node:os";
 
@@ -65,6 +66,8 @@ export interface WriteResult {
 export interface ClientOps {
   /** Load the client table now: write, remove and snippet are synchronous and need it. */
   load(): Promise<void>;
+  /** The key this app reads the server URL from (`url`, `serverUrl`, `httpUrl`...). */
+  urlField(client: ClientId): string;
   /** Apps whose config folder exists (Claude Code is detected by `claude` on PATH, not here). */
   detect(): Promise<ClientId[]>;
   /** Our `lefine` entry in every app and scope where one exists. */
@@ -80,22 +83,77 @@ let lib: Promise<AddMcp> | undefined;
 let loaded: AddMcp | undefined;
 const addMcp = (): Promise<AddMcp> => (lib ??= import("add-mcp").then((m) => (loaded = m)));
 
-/** The URL (or command line) of a stored entry, whatever the app calls the key (url, serverUrl, httpUrl...). */
-export function entryUrl(config: Record<string, unknown>): string | undefined {
-  for (const v of Object.values(config)) if (typeof v === "string" && /^https?:\/\//.test(v)) return v;
+/** True when `a` and `b` are the same URL, parsed (scheme, host, path and query all equal). Not a substring test. */
+export function sameUrl(a: unknown, b: unknown): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  try {
+    const x = new URL(a);
+    const y = new URL(b);
+    return x.href === y.href;
+  } catch {
+    return false;
+  }
+}
+
+/** The URL a stored entry really uses: the one field this app reads (`url`, `serverUrl`, `httpUrl`...), nothing else. */
+export function storedUrl(field: string, config: Record<string, unknown>): string | undefined {
+  const v = config[field];
+  return typeof v === "string" ? v : undefined;
+}
+
+/** A local (stdio) entry: it starts a program. */
+export const isStdio = (config: Record<string, unknown>): boolean => typeof config.command === "string";
+
+const isLink = (p: string): boolean => {
+  try {
+    return lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Why a config path must not be read or written, or undefined when it is fine. A symlink at the file would send
+ * our write (or the backup) wherever it points; with `root` (project scope) the real path must also stay inside
+ * that folder, so a `../` or a linked folder cannot reach out of the project.
+ */
+export function unsafePath(file: string, root?: string): string | undefined {
+  if (isLink(file)) return `${file} is a symbolic link, so it was left as it is`;
+  if (root) {
+    const base = resolve(root);
+    const target = resolve(file);
+    if (target !== base && !target.startsWith(base + sep)) return `${file} is outside the project folder ${base}, so it was left as it is`;
+    let dir = dirname(target);
+    while (!existsSync(dir) && dirname(dir) !== dir) dir = dirname(dir);
+    const realBase = realpathSync.native(base);
+    const realDir = realpathSync.native(dir);
+    if (realDir !== realBase && !realDir.startsWith(realBase + sep)) return `${file} resolves outside the project folder ${base} (a linked folder), so it was left as it is`;
+  }
   return undefined;
 }
 
-export const isStdio = (config: Record<string, unknown>): boolean => typeof config.command === "string" && entryUrl(config) === undefined;
-
-/** Copy a config file next to itself, once, readable by its owner only: it may hold other servers' keys. */
-export function backupFile(file: string): string | undefined {
-  if (!existsSync(file)) return undefined;
+/**
+ * Copy a config file next to itself, once, readable by its owner only: it may hold other servers' keys.
+ * Created with O_EXCL (`wx`): it never opens an existing file or follows a link at the backup path.
+ */
+export function backupFile(file: string): { path?: string; error?: string } {
+  if (!existsSync(file)) return {};
   const backup = `${file}.lefine-backup`;
-  if (existsSync(backup)) return undefined; // the first backup is the person's original
-  copyFileSync(file, backup);
-  chmodSync(backup, 0o600);
-  return backup;
+  if (isLink(backup)) return { error: `${backup} is a symbolic link, so nothing was changed` };
+  if (existsSync(backup)) return {}; // the first backup is the person's original
+  const data = readFileSync(file);
+  let fd: number;
+  try {
+    fd = openSync(backup, "wx", 0o600);
+  } catch (err) {
+    return { error: `could not create the backup ${backup} (${(err as Error).message}), so nothing was changed` };
+  }
+  try {
+    writeFileSync(fd, data);
+  } finally {
+    closeSync(fd);
+  }
+  return { path: backup };
 }
 
 /** Why a JSON config file cannot be edited, or undefined. Comments and trailing commas are allowed (VS Code, Zed). */
@@ -126,8 +184,16 @@ export const addMcpOps: ClientOps = {
   async find(cwd, clients = [...WRITABLE]) {
     const { listInstalledServers } = await addMcp();
     const out: Installed[] = [];
-    const ids = clients.filter((c) => isWritable(c)) as import("add-mcp").AgentType[];
+    const all = clients.filter((c) => isWritable(c)) as import("add-mcp").AgentType[];
     for (const scope of ["user", "project"] as const) {
+      // A config that is a symlink (or leaves the project folder) is not read: see unsafePath.
+      const ids = all.filter((c) => {
+        const t = loaded?.agents[c];
+        if (!t) return true;
+        const f = scope === "project" ? (t.localConfigPath ? join(cwd, t.localConfigPath) : undefined) : t.configPath;
+        return f === undefined || unsafePath(f, scope === "project" ? cwd : undefined) === undefined;
+      });
+      if (ids.length === 0) continue;
       const lists = await listInstalledServers({ global: scope === "user", agents: ids, cwd });
       for (const l of lists) {
         for (const s of l.servers) {
@@ -148,20 +214,36 @@ export const addMcpOps: ClientOps = {
     if (!mod) return { ok: false, file: "", error: "add-mcp is not loaded" };
     const local = scope === "project";
     const target = mod.agents[client as import("add-mcp").AgentType];
-    const file = local && target.localConfigPath ? `${cwd}/${target.localConfigPath}` : target.configPath;
+    const file = local && target.localConfigPath ? join(cwd, target.localConfigPath) : target.configPath;
+    const unsafe = unsafePath(file, local ? cwd : undefined);
+    if (unsafe) return { ok: false, file, error: unsafe };
     // add-mcp edits a broken JSON file in place and leaves it more broken: refuse those (comments are fine).
     const broken = brokenJson(file);
     if (broken) return { ok: false, file, error: `${broken}, so it was left as it is` };
-    const made = backup ? backupFile(file) : undefined;
+    const made = backup ? backupFile(file) : {};
+    if (made.error) return { ok: false, file, error: made.error };
     const r = mod.upsertServer(client, MCP_NAME, toServerConfig(entry), { local, cwd });
-    return r.success ? { ok: true, file: r.path, backup: made } : { ok: false, file: r.path || file, error: r.error ?? "could not write the file" };
+    return r.success ? { ok: true, file: r.path, backup: made.path } : { ok: false, file: r.path || file, error: r.error ?? "could not write the file" };
   },
 
   remove(client, scope, cwd) {
     const mod = loaded;
     if (!mod) return { ok: false, removed: false, file: "", error: "add-mcp is not loaded" };
+    const t = mod.agents[client as import("add-mcp").AgentType];
+    const f = scope === "project" ? (t.localConfigPath ? join(cwd, t.localConfigPath) : "") : t.configPath;
+    const unsafe = f ? unsafePath(f, scope === "project" ? cwd : undefined) : undefined;
+    if (unsafe) return { ok: false, removed: false, file: f, error: unsafe };
     const r = mod.removeServer(client, MCP_NAME, { local: scope === "project", cwd });
     return { ok: r.success, removed: r.removed, file: r.path, error: r.error };
+  },
+
+  urlField(client) {
+    const mod = loaded;
+    const agent = mod?.agents[client as import("add-mcp").AgentType];
+    if (!agent) return "url";
+    const probe = "https://probe.invalid/mcp";
+    const shaped = agent.transformConfig(MCP_NAME, toServerConfig({ type: "http", url: probe }), { local: false }) as Record<string, unknown> | undefined;
+    return Object.entries(shaped ?? {}).find(([, v]) => v === probe)?.[0] ?? "url";
   },
 
   snippet(client, entry) {
