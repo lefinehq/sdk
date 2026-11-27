@@ -9,6 +9,7 @@
  *   2. `dist/` must have the files package.json points at (an empty dist/ once shipped silently).
  *   3. `bun pm pack` writes the tarball, so `workspace:` ranges become real versions; a tarball that
  *      still says `workspace:` is refused (use-intl 0.10.1 went out like that).
+ *      The ranges must also equal each workspace package's current version (a stale bun.lock packs an old one).
  *   4. `npm publish <tarball>`: in GitHub Actions npm signs in through trusted publishing (OIDC,
  *      no token) and adds provenance when the repo is public. Locally it uses your npm login.
  *   5. A package is tagged and printed as `New tag: name@version` only after `npm view name@version`
@@ -75,6 +76,29 @@ export function publishOrder(pkgs: Pkg[]): Pkg[] {
   };
   for (const p of [...pkgs].sort((a, b) => a.name.localeCompare(b.name))) visit(p, new Set());
   return out;
+}
+
+/**
+ * Dependencies the source declares as `workspace:` whose range in the packed manifest is not the workspace
+ * package's current version. `bun pm pack` takes the version from bun.lock, so a stale lockfile ships an old
+ * range (@lefine/mcp rc.0 went out asking for lefine ^0.10.0 while the repo was at 0.11.0).
+ */
+export function staleWorkspaceRanges(source: Pkg, packedManifest: string, everything: Pkg[]): string[] {
+  type Fields = Record<"dependencies" | "peerDependencies" | "optionalDependencies", Record<string, string> | undefined>;
+  const packed = JSON.parse(packedManifest) as Fields;
+  const declared = source as unknown as Fields;
+  const bad: string[] = [];
+  for (const field of ["dependencies", "peerDependencies", "optionalDependencies"] as const) {
+    for (const [name, range] of Object.entries(declared[field] ?? {})) {
+      if (!range.startsWith("workspace:")) continue;
+      const target = everything.find((x) => x.name === name);
+      if (!target) continue;
+      const got = packed[field]?.[name];
+      const ok = [target.version, `^${target.version}`, `~${target.version}`];
+      if (got === undefined || !ok.includes(got)) bad.push(`${name} ${got ?? "(missing)"} (workspace is ${target.version})`);
+    }
+  }
+  return bad;
 }
 
 /** Files package.json promises (main, types, bin, every string under exports). */
@@ -169,6 +193,12 @@ async function main(): Promise<void> {
     const manifest = execFileSync("tar", ["-xOzf", tarball, "package/package.json"], { encoding: "utf-8" });
     if (manifest.includes('"workspace:')) {
       console.log(`FAILED   ${id}: the tarball still has a workspace: range (run bun install so the lockfile knows the versions)`);
+      failed.push(id);
+      continue;
+    }
+    const stale = staleWorkspaceRanges(p, manifest, everything);
+    if (stale.length > 0) {
+      console.log(`FAILED   ${id}: the tarball's dependency ranges are out of date: ${stale.join("; ")}. Run bun install so bun.lock knows the current versions, then release again.`);
       failed.push(id);
       continue;
     }

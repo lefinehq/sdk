@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { digests, distTag, privateDeps, promisedFiles, publishOrder, readPackages, sha256sums } from "../../scripts/release.ts";
+import { digests, distTag, privateDeps, promisedFiles, publishOrder, readPackages, sha256sums, staleWorkspaceRanges } from "../../scripts/release.ts";
 
 const REPO = resolve(__dirname, "../..");
 
@@ -59,6 +59,32 @@ describe("scripts/release.ts", () => {
       const repo = (p as { repository?: { url?: string } }).repository;
       expect(repo?.url, p.name).toBe("git+https://github.com/lefinehq/sdk.git");
     }
+  });
+});
+
+describe("scripts/release.ts: stale workspace ranges", () => {
+  const all = readPackages(REPO, true);
+  const mcp = all.find((p) => p.name === "@lefine/mcp")!;
+  const lefine = all.find((p) => p.name === "lefine")!;
+  const manifest = (range: string) => JSON.stringify({ name: mcp.name, dependencies: { lefine: range } });
+
+  it("the source really uses workspace: for lefine", () => {
+    expect(mcp.dependencies?.lefine).toMatch(/^workspace:/);
+  });
+  it("accepts the current version (^, ~ or exact)", () => {
+    for (const r of [`^${lefine.version}`, `~${lefine.version}`, lefine.version]) expect(staleWorkspaceRanges(mcp, manifest(r), all), r).toEqual([]);
+  });
+  it("refuses an old range from a stale lockfile, with the package and both versions", () => {
+    const bad = staleWorkspaceRanges(mcp, manifest("^0.10.0"), all);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]).toContain("lefine ^0.10.0");
+    expect(bad[0]).toContain(lefine.version);
+  });
+  it("refuses a dependency missing from the tarball", () => {
+    expect(staleWorkspaceRanges(mcp, JSON.stringify({ name: mcp.name }), all)[0]).toContain("(missing)");
+  });
+  it("ignores dependencies the source did not write as workspace:", () => {
+    expect(staleWorkspaceRanges({ ...mcp, dependencies: { lefine: "^0.10.0" } }, manifest("^0.10.0"), all)).toEqual([]);
   });
 });
 
