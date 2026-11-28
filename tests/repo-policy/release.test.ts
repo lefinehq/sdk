@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { digests, distTag, isLefine, privateDeps, promisedFiles, publishOrder, readPackages, sha256sums, staleWorkspaceRanges } from "../../scripts/release.ts";
+import { digests, distTag, failedDeps, isLefine, privateDeps, promisedFiles, publishOrder, readPackages, sha256sums, staleWorkspaceRanges } from "../../scripts/release.ts";
 
 const REPO = resolve(__dirname, "../..");
 
@@ -93,6 +93,15 @@ describe("scripts/release.ts: stale workspace ranges", () => {
   });
   it("ignores dependencies the source did not write as workspace:", () => {
     expect(staleWorkspaceRanges({ ...mcp, dependencies: { lefine: "^0.10.0" } }, manifest("^0.10.0"), all)).toEqual([]);
+  });
+});
+
+describe("scripts/release.ts: failed dependencies", () => {
+  it("holds a package whose workspace dependency failed earlier in the run", () => {
+    const all = readPackages(resolve(import.meta.dirname, "../.."), true);
+    const mcp = all.find((p) => p.name === "@lefine/mcp")!;
+    expect(failedDeps(mcp, new Set(["lefine"]))).toEqual(["lefine"]);
+    expect(failedDeps(mcp, new Set(["@lefine/cli"]))).toEqual([]);
   });
 });
 

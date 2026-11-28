@@ -70,6 +70,15 @@ export function privateDeps(p: Pkg, everything: Pkg[]): string[] {
   return Object.keys({ ...p.dependencies, ...p.peerDependencies }).filter((d) => hidden.has(d));
 }
 
+/**
+ * Dependencies that failed earlier in this run. A package that needs a version npm does not have cannot be
+ * installed, so it waits: 2026-11-28 @lefine/mcp 1.0.0-rc.2 went out needing lefine ^0.11.1, whose publish had
+ * just failed, and `npx @lefine/mcp@next` stopped installing.
+ */
+export function failedDeps(p: Pkg, failedNames: Set<string>): string[] {
+  return Object.keys({ ...p.dependencies, ...p.peerDependencies }).filter((d) => failedNames.has(d));
+}
+
 /** Dependencies first. Only edges inside the list count; a cycle keeps the remaining order. */
 export function publishOrder(pkgs: Pkg[]): Pkg[] {
   const names = new Set(pkgs.map((p) => p.name));
@@ -176,6 +185,7 @@ async function waitOnNpm(name: string, version: string, tries = 18): Promise<boo
 
 async function main(): Promise<void> {
   const failed: string[] = [];
+  const failedNames = new Set<string>();
   const records: Packed[] = [];
   const out = OUT ? resolve(OUT) : mkdtempSync(join(tmpdir(), "release-"));
   mkdirSync(out, { recursive: true });
@@ -189,16 +199,25 @@ async function main(): Promise<void> {
       console.log(`skip     ${id} (on npm)`);
       continue;
     }
+    const blocked = failedDeps(p, failedNames);
+    if (blocked.length > 0) {
+      console.log(`FAILED   ${id}: waits for ${blocked.join(", ")}, which did not publish in this run`);
+      failed.push(id);
+      failedNames.add(p.name);
+      continue;
+    }
     const hidden = privateDeps(p, everything);
     if (hidden.length > 0) {
       console.log(`FAILED   ${id}: depends on ${hidden.join(", ")}, which is private (not on npm yet). Publish that first.`);
       failed.push(id);
+      failedNames.add(p.name);
       continue;
     }
     const missing = promisedFiles(p).filter((f) => !existsSync(join(p.dir, f)));
     if (missing.length > 0) {
       console.log(`FAILED   ${id}: not built, missing ${missing.join(", ")}`);
       failed.push(id);
+      failedNames.add(p.name);
       continue;
     }
     // --quiet prints only the tarball's file name.
@@ -208,12 +227,14 @@ async function main(): Promise<void> {
     if (manifest.includes('"workspace:')) {
       console.log(`FAILED   ${id}: the tarball still has a workspace: range (run bun install so the lockfile knows the versions)`);
       failed.push(id);
+      failedNames.add(p.name);
       continue;
     }
     const stale = staleWorkspaceRanges(p, manifest, everything);
     if (stale.length > 0) {
       console.log(`FAILED   ${id}: the tarball's dependency ranges are out of date: ${stale.join("; ")}. Run bun install so bun.lock knows the current versions, then release again.`);
       failed.push(id);
+      failedNames.add(p.name);
       continue;
     }
     const record: Packed = { name: p.name, version: p.version, tarball: basename(tarball), ...digests(tarball), result: "failed" };
@@ -223,13 +244,18 @@ async function main(): Promise<void> {
     if (DRY) {
       console.log(publish.status === 0 ? `dry-run  ${id}` : `FAILED   ${id} (dry run)`);
       if (publish.status === 0) record.result = "dry-run";
-      else failed.push(id);
+      else {
+        failed.push(id);
+        failedNames.add(p.name);
+      }
+      failedNames.add(p.name);
       continue;
     }
     // A failed exit can still mean "already there" when a retry races npm's processing: npm decides.
     if (!(await waitOnNpm(p.name, p.version, publish.status === 0 ? 18 : 3))) {
       console.log(`FAILED   ${id}: npm publish exited ${publish.status} and npm does not have it`);
       failed.push(id);
+      failedNames.add(p.name);
       continue;
     }
     // npm has this version, but is it our tarball? A raced or earlier publish of the same version is not.
@@ -237,6 +263,7 @@ async function main(): Promise<void> {
     if (remote !== record.integrity) {
       console.log(`FAILED   ${id}: npm has it, but its integrity ${remote || "(none)"} is not our tarball's ${record.integrity}`);
       failed.push(id);
+      failedNames.add(p.name);
       continue;
     }
     record.result = "published";
