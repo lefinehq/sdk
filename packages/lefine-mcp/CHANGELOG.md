@@ -1,5 +1,12 @@
 # @lefine/mcp
 
+## 1.0.0-rc.3
+
+### Patch Changes
+
+- The server tells you when a newer `@lefine/mcp` is out: one line on stderr and one sentence in the `instructions` it sends the AI app, so the app can say "restart me". It compares this package's own version with its npm tag (a prerelease with `next` or `latest`, whichever is higher), at most once a day, never on stdout, off in CI and with `LEFINE_NO_UPDATE_CHECK=1`. Depends on `lefine ^0.11.2`.
+- `npx @lefine/mcp@next setup --local` writes `npx -y @lefine/mcp@next` into your AI apps, so a restart fetches the newest version. Config lines that say `npx -y @lefine/mcp` (no tag) keep npx's cached copy; `setup --doctor` flags them.
+
 ## 1.0.0-rc.2
 
 ### Patch Changes

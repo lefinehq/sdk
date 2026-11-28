@@ -23,11 +23,11 @@ the ones you pick, checks that the server answers and tells you the one click ea
 To run it as a server by hand, in a client config that starts a process (Claude Desktop, some IDEs):
 
 ```json
-{ "mcpServers": { "lefine": { "command": "npx", "args": ["-y", "@lefine/mcp"] } } }
+{ "mcpServers": { "lefine": { "command": "npx", "args": ["-y", "@lefine/mcp@next"] } } }
 ```
 
 When stdin is not a terminal (an AI app started it) this package is the stdio server. Existing configs that say
-`npx -y @lefine/mcp` or `npx -y lefine mcp` keep working. Needs Node 20 or newer.
+`npx -y @lefine/mcp` or `npx -y lefine mcp` keep working, but npx keeps the first copy it fetched for an untagged name: write a tag (`@next` until 1.0.0 is on `latest`, then `@latest`) so a restart of your AI app fetches the newest version. The server says on stderr, and in the instructions it sends the app, when a newer version is out (once a day; `LEFINE_NO_UPDATE_CHECK=1` turns it off). `npx @lefine/mcp@next setup --local` writes the tagged command for you. Needs Node 20 or newer.
 
 **Sign in** with `npx @lefine/mcp setup` (or `npx lefine login`), or set `LEFINE_TOKEN` to a key from
 Lefine, Settings > API keys. Tick Content or Studio on the key if the agent needs them.

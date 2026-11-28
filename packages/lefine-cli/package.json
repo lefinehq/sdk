@@ -1,6 +1,6 @@
 {
   "name": "@lefine/cli",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "Lefine from the terminal: sign in, then pull, push, check and publish your app strings",
   "license": "MIT",
   "type": "module",

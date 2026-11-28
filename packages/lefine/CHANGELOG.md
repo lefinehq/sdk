@@ -1,5 +1,13 @@
 # lefine
 
+## 0.11.2
+
+### Patch Changes
+
+- People hear about a new version. `lefine` and `lefine mcp` ask the npm registry at most once a day (1.5 s limit, in the background, cached in `~/.lefine/update-check.json`) and say it on the next start: the CLI prints one line on stderr at the end of a command (terminals only); the MCP server prints a line on stderr and adds one sentence to the `instructions` it sends the AI app (or to the first tool result when the app never sends `initialize`), so the app can tell the person to restart it. Nothing is written to stdout. Off in CI, with `LEFINE_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER`, and when the registry cannot be reached. A prerelease compares with `next` (or `latest` when that is higher), a stable version with `latest`.
+- `lefine setup --local` writes a tagged command, `npx -y lefine@latest mcp` (or `@next` on a prerelease; `npx -y @lefine/mcp@<tag>` when run from `@lefine/mcp`), so every restart asks the registry. An untagged `npx -y lefine mcp` keeps the first copy npx cached, for ever. `lefine setup --doctor` flags such an entry and prints the command that replaces it.
+- The end of `lefine setup` says who is signed in and who is not. It asks Claude Code (`claude mcp get lefine`) and Codex (`codex mcp list --json`), lists the sign-in step only for apps that still need it, and for Codex asks "Sign in to Codex now?" and runs `codex mcp login lefine` in the terminal (not with `--yes`, `--json`, or without a terminal). One numbered "Next" list ends with the sentence to try. The JSON report has `signedIn`.
+
 ## 0.11.1
 
 ### Patch Changes

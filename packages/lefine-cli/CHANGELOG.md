@@ -1,5 +1,11 @@
 # @lefine/cli
 
+## 0.12.2
+
+### Patch Changes
+
+- Same source as `lefine` 0.11.2: an update notice at the end of a command (once a day, off in CI or with `LEFINE_NO_UPDATE_CHECK=1`), `setup --local` writes a tagged `npx -y lefine@latest mcp`, and the end of `setup` shows who is signed in and offers `codex mcp login lefine`.
+
 ## 0.12.1
 
 ### Patch Changes
