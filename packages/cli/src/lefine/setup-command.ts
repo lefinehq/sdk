@@ -16,7 +16,7 @@
  * with a `next` command, and never waits for a question.
  */
 
-import { exec, execFile } from "node:child_process";
+import { exec, execFile, spawn } from "node:child_process";
 import { accessSync, constants, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -348,6 +348,47 @@ export function manualSteps(client: ClientId, url: string): string[] {
   return ["Open Claude Desktop: Settings > Connectors > Add custom connector.", `Paste ${url} and click Continue.`, "Sign in to Lefine in the browser page and approve."];
 }
 
+/** Whether an app is signed in to the remote server, when its own tools can tell. */
+export type SignIn = "signed-in" | "needed" | "unknown";
+
+/**
+ * Reads sign-in from what the app prints. Claude Code: `claude mcp get lefine` has a Status line ("✔ connected" or
+ * "! Needs authentication"). Codex: `codex mcp list --json` has `auth_status` per server (`not_logged_in`, `o_auth`,
+ * `bearer_token`, `unsupported`). Anything else, or output we do not recognise, is "unknown".
+ */
+export function parseSignIn(client: ClientId, output: string): SignIn {
+  if (client === "claude-code") {
+    const status = /^\s*Status:\s*(.*)$/im.exec(output)?.[1] ?? "";
+    if (/needs authentication/i.test(status)) return "needed";
+    if (/connected/i.test(status) && !/fail|not connected|disconnected/i.test(status)) return "signed-in";
+    return "unknown";
+  }
+  if (client === "codex") {
+    try {
+      const list = JSON.parse(output.slice(output.indexOf("["))) as { name?: string; auth_status?: string }[];
+      const row = list.find((r) => r.name === MCP_NAME);
+      if (row?.auth_status === "not_logged_in") return "needed";
+      if (row?.auth_status === "o_auth" || row?.auth_status === "bearer_token") return "signed-in";
+    } catch {
+      /* not JSON: unknown */
+    }
+  }
+  return "unknown";
+}
+
+/** The command an app has for signing in, when it has one (so setup can offer to run it). */
+export const SIGN_IN_COMMAND: Partial<Record<ClientId, { cmd: string; args: string[] }>> = {
+  codex: { cmd: "codex", args: ["mcp", "login", MCP_NAME] },
+};
+
+/** Runs a sign-in command in this terminal (it opens a browser and waits), so the person sees its own output. */
+export const realSignIn = (cmd: string, args: string[]): Promise<number> =>
+  new Promise((resolve) => {
+    const child = spawn(cmd, args, { stdio: "inherit", shell: process.platform === "win32" });
+    child.on("error", () => resolve(1));
+    child.on("close", (code) => resolve(code ?? 1));
+  });
+
 /** What to click after the file is written: the sign-in step each app needs once. */
 export function nextClick(client: ClientId): string {
   switch (client) {
@@ -440,6 +481,8 @@ export interface Report {
   findings?: Finding[];
   installed?: { client: ClientId; scope: Scope; file: string; url?: string; stdio: boolean }[];
   steps?: string[];
+  /** Apps already signed in to the remote server (the others are in `steps`). */
+  signedIn?: ClientId[];
   try?: string;
   undo?: string;
   error?: string;
@@ -453,6 +496,8 @@ export interface SetupDeps {
   ops?: ClientOps;
   ui?: SetupUi;
   fetch?: typeof fetch;
+  /** Runs an app's own sign-in command with the terminal attached (Codex). Replaceable in tests. */
+  signIn?: (cmd: string, args: string[]) => Promise<number>;
   /** Device login into the profile. Replaceable in tests. */
   login?: (profile: string, apiUrl?: string) => Promise<void>;
   tty?: boolean;
@@ -820,20 +865,46 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
       if (!json && !report.check.reachable) ui.warn(yellow("The config is written, but the server did not answer as expected. Check your network, then run: npx lefine setup --doctor"));
     }
 
-    const steps = live.map((o) => nextClick(o.client));
+    // Remote server: which apps still need the one sign-in. Local: the key is saved, nothing to sign in.
+    const signedIn: ClientId[] = [];
+    const pending: ClientId[] = [];
+    for (const o of live) {
+      const state = local ? "signed-in" : await signInState(o.client);
+      if (state === "signed-in") signedIn.push(o.client);
+      else pending.push(o.client);
+    }
+    // An app with its own sign-in command: offer to run it here, in a terminal, when a person is there to answer.
+    for (const client of [...pending]) {
+      const command = SIGN_IN_COMMAND[client];
+      if (!command || json || options.yes || !(deps.tty ?? process.stdin.isTTY)) continue;
+      const yes = await ui.confirm(`Sign in to ${LABEL[client]} now?`, true);
+      if (!yes) continue;
+      await (deps.signIn ?? realSignIn)(command.cmd, command.args);
+      if ((await signInState(client)) === "signed-in") {
+        pending.splice(pending.indexOf(client), 1);
+        signedIn.push(client);
+      }
+    }
+
+    const steps = pending.map((c) => nextClick(c));
     const manual = report.results.filter((o) => o.status === "manual");
     for (const m of manual) steps.push(`${LABEL[m.client]}: ${m.detail}`);
     report.steps = steps;
+    report.signedIn = signedIn;
     report.try = TRY_PROMPT;
     report.undo = UNDO;
-    report.next = failed.length ? "npx lefine setup --doctor" : steps[0] ?? "npx lefine setup --list";
+    report.next = failed.length ? "npx lefine setup --doctor" : steps[0] ?? `Say to your AI app: "${TRY_PROMPT}"`;
 
     if (!json) {
-      if (live.length && !local) {
-        say(`${bold("One more step: sign in once.")}\n${live.map((o) => `  ${nextClick(o.client)}`).join("\n")}\nA browser page opens. Pick your workspace and click Approve.`);
-        say(`${bold("Then say this to your AI app:")}\n  "${TRY_PROMPT}"`);
-      } else if (live.length) {
+      if (live.length && local) {
         say(`Restart ${live.map((o) => LABEL[o.client]).join(" / ")}. Lefine starts by itself with the key you just saved.`);
+      } else if (live.length || manual.length) {
+        // One numbered list: the sign-in steps that are left, then the sentence to try. At most 3 lines per app.
+        const lines = signedIn.length ? [`${green("✔")} Signed in: ${signedIn.map((c) => LABEL[c]).join(", ")}`] : [];
+        const todo = [...steps, `Say this to your AI app: "${TRY_PROMPT}"`];
+        lines.push(bold("Next:"), ...todo.map((t, i) => `  ${i + 1}. ${t}`));
+        if (pending.length) lines.push(dim("  (A browser page opens when you sign in: pick your workspace, click Approve.)"));
+        say(lines.join("\n"));
       }
       if (useReadonly && !local) say("Read-only: the AI can look, not change. Run setup again without --readonly to allow edits.");
       ui.outro(`Undo any time: ${bold(UNDO)}`);
@@ -844,6 +915,17 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
       if (!json) ui.outro("Cancelled. Nothing was changed.");
       return finish(0);
     }
+  }
+
+  /** Asks the app itself. An app we cannot ask (or one that fails) counts as "unknown": its sign-in step stays on the list. */
+  async function signInState(client: ClientId): Promise<SignIn> {
+    try {
+      if (client === "claude-code") return parseSignIn(client, (await run("claude", ["mcp", "get", MCP_NAME])).output);
+      if (client === "codex") return parseSignIn(client, (await run("codex", ["mcp", "list", "--json"])).output);
+    } catch {
+      /* fall through */
+    }
+    return "unknown";
   }
 
   async function writeClient(client: ClientId, entry: ServerEntry, sc: Scope): Promise<ClientOutcome> {

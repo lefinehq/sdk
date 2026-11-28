@@ -10,6 +10,7 @@ import {
   parseClaudeGet,
   readClaudeEntries,
   parseClients,
+  parseSignIn,
   printSnippets,
   remoteUrl,
   serverEntry,
@@ -625,5 +626,86 @@ describe("unsafePath", () => {
     mkdirSync(join(home, "proj"));
     expect(unsafePath(join(home, "proj", "..", "evil.json"), join(home, "proj"))).toContain("outside the project folder");
     expect(unsafePath(join(home, "proj", ".cursor", "mcp.json"), join(home, "proj"))).toBeUndefined();
+  });
+});
+
+describe("sign-in state and the end screen", () => {
+  const codexJson = (status: string) => JSON.stringify([{ name: "other", auth_status: "unsupported" }, { name: "lefine", auth_status: status }]);
+  const claudeGet = (status: string) => `lefine:\n  Scope: User config (available in all your projects)\n  Status: ${status}\n  Type: http\n  URL: https://dash.lefine.ai/v1/mcp\n`;
+
+  test("parseSignIn reads Claude Code's Status line and Codex's auth_status", () => {
+    expect(parseSignIn("claude-code", claudeGet("! Needs authentication"))).toBe("needed");
+    expect(parseSignIn("claude-code", claudeGet("✔ connected"))).toBe("signed-in");
+    expect(parseSignIn("claude-code", claudeGet("✗ Failed to connect"))).toBe("unknown");
+    expect(parseSignIn("claude-code", "no status here")).toBe("unknown");
+    expect(parseSignIn("codex", codexJson("not_logged_in"))).toBe("needed");
+    expect(parseSignIn("codex", codexJson("o_auth"))).toBe("signed-in");
+    expect(parseSignIn("codex", codexJson("unsupported"))).toBe("unknown");
+    expect(parseSignIn("codex", "warning: x\n" + codexJson("o_auth"))).toBe("signed-in");
+    expect(parseSignIn("codex", "garbage")).toBe("unknown");
+    expect(parseSignIn("cursor", codexJson("o_auth"))).toBe("unknown");
+  });
+
+  /** Claude Code already set up and signed in; Codex set up and not signed in. */
+  const run = (codex: { status: string; afterLogin?: string }) => {
+    let loggedIn = false;
+    const calls: string[] = [];
+    const runner = async (cmd: string, args: string[]) => {
+      calls.push(`${cmd} ${args.join(" ")}`);
+      if (cmd === "claude" && args[1] === "get") return { code: 0, output: claudeGet("✔ connected") + "  Type: http\n  URL: https://dash.lefine.ai/v1/mcp" };
+      if (cmd === "codex") return { code: 0, output: codexJson(loggedIn ? (codex.afterLogin ?? "o_auth") : codex.status) };
+      return { code: 0, output: "" };
+    };
+    return { runner, calls, login: () => void (loggedIn = true) };
+  };
+
+  test("a signed-in app is not on the Next list; the unsigned one is, with the sentence to try", async () => {
+    fakeClaude();
+    const r = run({ status: "not_logged_in" });
+    const { ops } = fakeOps(["codex"]);
+    const { ui, shown } = fakeUi({ pick: ["claude-code", "codex"] });
+    await setupCommand({ check: false }, { env, ops, ui, tty: true, log, run: r.runner, signIn: async () => 0 });
+    const end = shown.find((l) => l.includes("Next:"))!;
+    expect(end).toContain("Signed in: Claude Code");
+    expect(end).toContain("1. Codex: run `codex mcp login lefine`");
+    expect(end).not.toContain("/mcp, pick lefine");
+    expect(end).toContain('2. Say this to your AI app: "Use Lefine.');
+    expect(end.split("\n").length).toBeLessThanOrEqual(6);
+  });
+
+  test("Codex: offers to sign in now, runs `codex mcp login lefine`, and drops it from the list when it worked", async () => {
+    fakeClaude();
+    const r = run({ status: "not_logged_in" });
+    const ran: string[] = [];
+    const { ops } = fakeOps(["codex"]);
+    const { ui, shown, asked } = fakeUi({ pick: ["codex"], readonly: true });
+    await setupCommand({ check: false }, { env, ops, ui, tty: true, log, run: r.runner, signIn: async (c, a) => (ran.push(`${c} ${a.join(" ")}`), r.login(), 0) });
+    expect(asked).toContain("confirm:Sign in to Codex now?");
+    expect(ran).toEqual(["codex mcp login lefine"]);
+    const end = shown.find((l) => l.includes("Next:"))!;
+    expect(end).toContain("Signed in: Codex");
+    expect(end).not.toContain("codex mcp login");
+    expect(end).toContain('1. Say this to your AI app');
+  });
+
+  test("declined, --yes, or no terminal: no prompt, the one-line instruction stays", async () => {
+    const { ops } = fakeOps(["codex"]);
+    const r = run({ status: "not_logged_in" });
+    const declined = fakeUi({ pick: ["codex"], readonly: false });
+    await setupCommand({ check: false }, { env, ops, ui: declined.ui, tty: true, log, run: r.runner, signIn: async () => (expect.unreachable("must not run"), 0) });
+    expect(declined.asked).toContain("confirm:Sign in to Codex now?");
+    expect(declined.shown.find((l) => l.includes("Next:"))).toContain("Codex: run `codex mcp login lefine`");
+    const yes = fakeUi({ pick: ["codex"] });
+    await setupCommand({ check: false, yes: true }, { env, ops, ui: yes.ui, tty: true, log, run: r.runner });
+    expect(yes.asked.some((a) => a.startsWith("confirm:Sign in"))).toBe(false);
+  });
+
+  test("an app we cannot ask stays on the list as sign-in needed; JSON has signedIn and steps", async () => {
+    const { ops } = fakeOps(["cursor"]);
+    lines = [];
+    await setupCommand({ client: ["cursor"], check: false, json: true }, { env, ops, tty: false, log });
+    const rep = report();
+    expect(rep.signedIn).toEqual([]);
+    expect(rep.steps).toEqual(["Cursor: open Settings > MCP, click Connect next to lefine"]);
   });
 });

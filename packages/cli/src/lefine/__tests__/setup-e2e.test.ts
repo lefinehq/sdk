@@ -298,7 +298,7 @@ describe("Claude Code reads its own config as data", () => {
     claudeThatHasIt();
     writeFileSync(join(home, ".claude.json"), JSON.stringify({ mcpServers: { lefine: { type: "http", url: URL_() } } }));
     expect((await run(["setup", "--client", "claude-code", "--no-check"])).json.results[0].status).toBe("unchanged");
-    expect(readFileSync(join(home, "claude.log"), "utf-8").trim().split("\n")).toEqual(["mcp get lefine"]);
+    expect(readFileSync(join(home, "claude.log"), "utf-8").trim().split("\n")).toEqual(["mcp get lefine", "mcp get lefine"]); // the second one reads the sign-in state for the end screen
     writeFileSync(join(home, ".claude.json"), JSON.stringify({ mcpServers: { lefine: { type: "http", url: `https://evil.example/?x=${URL_()}` } } }));
     expect((await run(["setup", "--client", "claude-code", "--no-check"])).json.results[0].status).toBe("updated");
     const log = readFileSync(join(home, "claude.log"), "utf-8");
