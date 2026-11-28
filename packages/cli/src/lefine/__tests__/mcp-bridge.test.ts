@@ -5,7 +5,7 @@ import { KEY_REFUSED, createBridge, runBridge } from "../mcp-bridge.js";
 
 type Sent = { url: string; headers: Record<string, string>; body: unknown };
 
-function setup(answer: (body: Record<string, unknown>) => { status: number; body?: unknown }, auth: { token: string; apiUrl: string } | null = { token: "lfn_test", apiUrl: "https://dash.lefine.ai" }) {
+function setup(answer: (body: Record<string, unknown>) => { status: number; body?: unknown }, auth: { token: string; apiUrl: string } | null = { token: "lfn_test", apiUrl: "https://dash.lefine.ai" }, extra: { updateNote?: string | null } = {}) {
   const sent: Sent[] = [];
   const out: unknown[] = [];
   const logs: string[] = [];
@@ -20,6 +20,7 @@ function setup(answer: (body: Record<string, unknown>) => { status: number; body
     write: (line: string) => out.push(JSON.parse(line)),
     log: (line: string) => logs.push(line),
     clientVersion: "0.0.0-test",
+    ...extra,
   };
   return { bridge: createBridge(deps), deps, sent, out, logs };
 }
@@ -40,6 +41,33 @@ describe("lefine-mcp bridge", () => {
       // The bridge adds its local tools to the server's list (mcp-local.ts).
       { jsonrpc: "2.0", id: 2, result: { tools: [...localToolDefs(DEFAULT_OPTIONS)] } },
     ]);
+  });
+
+  test("update note: added once to the initialize instructions (kept after the server's own), never to a tool result", async () => {
+    const note = "Lefine update: a newer Lefine MCP (1.2.3) is out.";
+    const { bridge, out } = setup((b) => (b.method === "initialize" ? ok(b.id, { protocolVersion: "2025-06-18", instructions: "Use lefine_read." }) : ok(b.id, { content: [{ type: "text", text: "hi" }] })), undefined, { updateNote: note });
+    await bridge.handle(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } }));
+    await bridge.handle(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "lefine_read", arguments: {} } }));
+    expect((out[0] as { result: { instructions: string } }).result.instructions).toBe(`Use lefine_read.\n\n${note}`);
+    expect((out[1] as { result: { content: unknown[] } }).result.content).toEqual([{ type: "text", text: "hi" }]);
+  });
+
+  test("update note: instructions are created when the server sent none; without a note nothing changes", async () => {
+    const a = setup((b) => ok(b.id, { protocolVersion: "2025-06-18" }), undefined, { updateNote: "N" });
+    await a.bridge.handle(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+    expect((a.out[0] as { result: Record<string, unknown> }).result).toEqual({ protocolVersion: "2025-06-18", instructions: "N" });
+    const b = setup((x) => ok(x.id, { protocolVersion: "2025-06-18" }), undefined, { updateNote: null });
+    await b.bridge.handle(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+    expect((b.out[0] as { result: Record<string, unknown> }).result).toEqual({ protocolVersion: "2025-06-18" });
+  });
+
+  test("update note: with no initialize (modern era) the first tool result carries it once, an error result never", async () => {
+    const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28" };
+    let n = 0;
+    const { bridge, out } = setup((b) => ok(b.id, ++n === 1 ? { isError: true, content: [{ type: "text", text: "no" }] } : { content: [{ type: "text", text: "yes" }] }), undefined, { updateNote: "N" });
+    for (const id of [1, 2, 3]) await bridge.handle(JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "lefine_read", arguments: {}, _meta: meta } }));
+    const texts = out.map((o) => (o as { result: { content: Array<{ text: string }> } }).result.content.map((c) => c.text));
+    expect(texts).toEqual([["no"], ["yes", "N"], ["yes"]]);
   });
 
   test("modern: the _meta version, method and tool name are mirrored in the headers", async () => {

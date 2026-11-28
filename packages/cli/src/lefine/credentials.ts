@@ -25,7 +25,7 @@ export interface LefineCredentials {
 }
 
 /** Read per call so tests (and users) can point `LEFINE_HOME` elsewhere. */
-const configDir = () => process.env.LEFINE_HOME || join(homedir(), ".lefine");
+export const configDir = () => process.env.LEFINE_HOME || join(homedir(), ".lefine");
 export const credentialsPath = () => join(configDir(), "credentials.json");
 
 /** A profile is a named copy of credentials.json in ~/.lefine/profiles/<name>.json. `LEFINE_PROFILE=<name>` selects it. */

@@ -45,6 +45,9 @@ export interface BridgeDeps {
   cwd?: string;
   /** Test seam for the tool list's age. */
   now?: () => number;
+  /** One sentence about a newer version (update-check.ts). Added to the `initialize` answer's `instructions`, or, when
+   *  the client never sends `initialize` (the modern era), to the first tool result. Said once per run. */
+  updateNote?: string | null;
 }
 
 type Message = { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: Record<string, unknown>; result?: Record<string, unknown> };
@@ -73,6 +76,7 @@ export function createBridge(deps: BridgeDeps) {
   /** The server's tool list (unfiltered), when it was read, and the rest of the result (resultType and the like). */
   let cache: { at: number; tools: RemoteTool[]; rest: Record<string, unknown> } | null = null;
   let roots: string[] | null = null;
+  let noteSaid = false;
 
   const getRoots = (): string[] => {
     if (roots) return roots;
@@ -269,6 +273,16 @@ export function createBridge(deps: BridgeDeps) {
     if (sent.kind !== "http" || sent.status === 202 || !sent.parsed) return;
     let parsed = sent.parsed;
     if (msg.method === "initialize" && typeof parsed.result?.protocolVersion === "string") legacyVersion = parsed.result.protocolVersion;
+    if (deps.updateNote && !noteSaid && parsed.result) {
+      if (msg.method === "initialize" && legacyVersion) {
+        const have = parsed.result.instructions;
+        parsed = { ...parsed, result: { ...parsed.result, instructions: typeof have === "string" && have ? `${have}\n\n${deps.updateNote}` : deps.updateNote } };
+        noteSaid = true;
+      } else if (msg.method === "tools/call" && !legacyVersion && Array.isArray(parsed.result.content) && !parsed.result.isError) {
+        parsed = { ...parsed, result: { ...parsed.result, content: [...parsed.result.content, { type: "text", text: deps.updateNote }] } };
+        noteSaid = true;
+      }
+    }
     // The server answers some refusals (no key, bad JSON) before it reads the id; the client is waiting for its own.
     if (parsed.id === null && msg.id !== undefined && msg.id !== null) parsed = { ...parsed, id: msg.id };
     deps.write(JSON.stringify(parsed));

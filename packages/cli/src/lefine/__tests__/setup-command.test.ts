@@ -116,13 +116,13 @@ describe("entries and URLs", () => {
   });
   test("local entry selects the profile and carries no key", () => {
     const entry = serverEntry(true);
-    expect(entry).toEqual({ command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } });
+    expect(entry).toEqual({ command: "npx", args: ["-y", "lefine@latest", "mcp"], env: { LEFINE_PROFILE: "mcp" } });
     expect(JSON.stringify(entry)).not.toContain("lfn_");
   });
   test("claude add args: scope and read-only", () => {
     expect(claudeAddArgs(false)).toEqual(["mcp", "add", "--transport", "http", "--scope", "user", "lefine", "https://dash.lefine.ai/v1/mcp"]);
     expect(claudeAddArgs(false, undefined, true, "project")).toEqual(["mcp", "add", "--transport", "http", "--scope", "project", "lefine", "https://dash.lefine.ai/v1/mcp?level=read"]);
-    expect(claudeAddArgs(true)).toEqual(["mcp", "add", "--scope", "user", "-e", "LEFINE_PROFILE=mcp", "lefine", "--", "npx", "-y", "lefine", "mcp"]);
+    expect(claudeAddArgs(true)).toEqual(["mcp", "add", "--scope", "user", "-e", "LEFINE_PROFILE=mcp", "lefine", "--", "npx", "-y", "lefine@latest", "mcp"]);
   });
   test("parseClients: aliases, duplicates, unknown", () => {
     expect(parseClients(["cursor,vscode", "cursor", "claude", "gemini"])).toEqual(["cursor", "vscode", "claude-code", "gemini-cli"]);
@@ -183,19 +183,19 @@ describe("Claude Code", () => {
     `lefine:\n  Scope: User config\n  Status: ok\n  Type: stdio\n  Command: ${cmd}\n  Args: ${args}\n  Environment:\n${env.map((e) => `    ${e}`).join("\n")}\n`;
   const local = { local: true, readonly: false, scope: "user" as const };
 
-  test("local: the exact stdio entry (npx, -y lefine mcp, LEFINE_PROFILE=mcp) is unchanged", async () => {
-    const { calls, run } = runner([{ code: 0, output: stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=mcp"]) }]);
+  test("local: the exact stdio entry (npx, -y lefine@latest mcp, LEFINE_PROFILE=mcp) is unchanged", async () => {
+    const { calls, run } = runner([{ code: 0, output: stdioOut("npx", "-y lefine@latest mcp", ["LEFINE_PROFILE=mcp"]) }]);
     expect((await setupClaudeCode(local, run)).status).toBe("unchanged");
     expect(calls).toHaveLength(1);
   });
   test("local: spoofed stdio entries are replaced where they live", async () => {
     for (const output of [
-      stdioOut("node", "-y lefine mcp", ["LEFINE_PROFILE=mcp"]), // other command
+      stdioOut("node", "-y lefine@latest mcp", ["LEFINE_PROFILE=mcp"]), // other command
       stdioOut("sh", "-c evil LEFINE_PROFILE=mcp lefine mcp", ["LEFINE_PROFILE=mcp"]), // LEFINE_PROFILE only as decoration
       stdioOut("npx", "-y lefine-evil mcp", ["LEFINE_PROFILE=mcp"]), // other package
-      stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=mcp", "NODE_OPTIONS=--require=/tmp/x.js"]), // extra env
-      stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=other"]), // other profile
-      stdioOut("npx", "-y lefine mcp", []), // no profile
+      stdioOut("npx", "-y lefine@latest mcp", ["LEFINE_PROFILE=mcp", "NODE_OPTIONS=--require=/tmp/x.js"]), // extra env
+      stdioOut("npx", "-y lefine@latest mcp", ["LEFINE_PROFILE=other"]), // other profile
+      stdioOut("npx", "-y lefine@latest mcp", []), // no profile
       "lefine:\n  Scope: Project config\n  Type: http\n  URL: https://dash.lefine.ai/v1/mcp\n", // a remote entry
     ]) {
       const { calls, run } = runner([{ code: 0, output }, { code: 0, output: "" }, { code: 0, output: "" }]);
@@ -204,33 +204,33 @@ describe("Claude Code", () => {
     }
   });
   test("local: the exact entry in another scope is not enough", async () => {
-    const { calls, run } = runner([{ code: 0, output: stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=mcp"]).replace("User config", "Project config") }, { code: 0, output: "" }, { code: 0, output: "" }]);
+    const { calls, run } = runner([{ code: 0, output: stdioOut("npx", "-y lefine@latest mcp", ["LEFINE_PROFILE=mcp"]).replace("User config", "Project config") }, { code: 0, output: "" }, { code: 0, output: "" }]);
     expect((await setupClaudeCode(local, run)).status).toBe("updated");
     expect(calls[1]).toContain("project");
   });
   test("parseClaudeGet reads Command, Args and the Environment block only", () => {
-    const got = parseClaudeGet(stdioOut("npx", "-y lefine mcp", ["LEFINE_PROFILE=mcp", "LEFINE_API_URL=https://x.test"]) + "Note: A=b\n");
-    expect(got).toMatchObject({ type: "stdio", command: "npx", args: "-y lefine mcp", env: { LEFINE_PROFILE: "mcp", LEFINE_API_URL: "https://x.test" } });
+    const got = parseClaudeGet(stdioOut("npx", "-y lefine@latest mcp", ["LEFINE_PROFILE=mcp", "LEFINE_API_URL=https://x.test"]) + "Note: A=b\n");
+    expect(got).toMatchObject({ type: "stdio", command: "npx", args: "-y lefine@latest mcp", env: { LEFINE_PROFILE: "mcp", LEFINE_API_URL: "https://x.test" } });
   });
 
   test("malformed Environment block (text path) fails closed: replaced", async () => {
     for (const env of [["LEFINE_PROFILE=mcp", "this is not an env line"], ["LEFINE_PROFILE mcp"], ["LEFINE_PROFILE=mcp", "  deeper=x", "}{"]]) {
-      const { calls, run } = runner([{ code: 0, output: stdioOut("npx", "-y lefine mcp", env) }, { code: 0, output: "" }, { code: 0, output: "" }]);
+      const { calls, run } = runner([{ code: 0, output: stdioOut("npx", "-y lefine@latest mcp", env) }, { code: 0, output: "" }, { code: 0, output: "" }]);
       expect((await setupClaudeCode(local, run)).status).toBe("updated");
       expect(calls.map((c) => c[1])).toEqual(["get", "remove", "add"]);
     }
-    expect(parseClaudeGet(stdioOut("npx", "-y lefine mcp", ["A=b", "junk"])).malformed).toBe(true);
-    expect(parseClaudeGet(stdioOut("npx", "-y lefine mcp", ["A=b"])).malformed).toBe(false);
+    expect(parseClaudeGet(stdioOut("npx", "-y lefine@latest mcp", ["A=b", "junk"])).malformed).toBe(true);
+    expect(parseClaudeGet(stdioOut("npx", "-y lefine@latest mcp", ["A=b"])).malformed).toBe(false);
   });
   test("the real `claude mcp get` text format matches", async () => {
-    const { calls, run } = runner([{ code: 0, output: "lefine:\n  Scope: User config (available in all your projects)\n  Status: ✔ connected\n  Type: stdio\n  Command: npx\n  Args: -y lefine mcp\n  Environment:\n    LEFINE_PROFILE=mcp\n\nTo remove this server, run: claude mcp remove \"lefine\" -s user\n" }]);
+    const { calls, run } = runner([{ code: 0, output: "lefine:\n  Scope: User config (available in all your projects)\n  Status: ✔ connected\n  Type: stdio\n  Command: npx\n  Args: -y lefine@latest mcp\n  Environment:\n    LEFINE_PROFILE=mcp\n\nTo remove this server, run: claude mcp remove \"lefine\" -s user\n" }]);
     expect((await setupClaudeCode(local, run)).status).toBe("unchanged");
     expect(calls).toHaveLength(1);
   });
 
   describe("structured config (~/.claude.json, .mcp.json)", () => {
-    const text = "lefine:\n  Scope: User config\n  Type: stdio\n  Command: npx\n  Args: -y lefine mcp\n  Environment:\n    LEFINE_PROFILE=mcp\n"; // would match: the files decide
-    const OURS = { type: "stdio", command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } };
+    const text = "lefine:\n  Scope: User config\n  Type: stdio\n  Command: npx\n  Args: -y lefine@latest mcp\n  Environment:\n    LEFINE_PROFILE=mcp\n"; // would match: the files decide
+    const OURS = { type: "stdio", command: "npx", args: ["-y", "lefine@latest", "mcp"], env: { LEFINE_PROFILE: "mcp" } };
     const REMOTE = { type: "http", url: "https://dash.lefine.ai/v1/mcp" };
     const proj = () => join(home, "proj");
     const files = () => ({ home, cwd: proj() });
@@ -262,8 +262,8 @@ describe("Claude Code", () => {
     test("spoofed stdio entries: whole-object compare replaces them (args as array, extra env, other command, extra keys)", async () => {
       for (const bad of [
         { ...OURS, command: "node" },
-        { ...OURS, args: ["-y", "lefine", "mcp", "x"] },
-        { ...OURS, args: ["-y lefine mcp"] },
+        { ...OURS, args: ["-y", "lefine@latest", "mcp", "x"] },
+        { ...OURS, args: ["-y lefine@latest mcp"] },
         { ...OURS, env: { LEFINE_PROFILE: "mcp", NODE_OPTIONS: "--require=/tmp/x.js" } },
         { ...OURS, env: {} },
         { ...OURS, headers: { a: "b" } },
@@ -276,7 +276,7 @@ describe("Claude Code", () => {
       }
     });
     test("a stdio entry without `type` is the same entry", async () => {
-      put({ mcpServers: { lefine: { command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } } } });
+      put({ mcpServers: { lefine: { command: "npx", args: ["-y", "lefine@latest", "mcp"], env: { LEFINE_PROFILE: "mcp" } } } });
       expect((await go({})).r.status).toBe("unchanged");
     });
     test("remote: exact URL unchanged; spoofed URL replaced", async () => {
@@ -508,13 +508,13 @@ describe("setup without a terminal (JSON)", () => {
   test("--local: the exact stdio entry is unchanged; spoofed ones (other command, extra env, args elsewhere) are replaced", async () => {
     const main = { token: "lfn_x", apiUrl: "https://dash.lefine.ai", workspace: { id: "w", slug: "s", name: "S" }, scopes: [], savedAt: "x" };
     saveCredentials(main, "mcp");
-    const ours = { command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } };
+    const ours = { command: "npx", args: ["-y", "lefine@latest", "mcp"], env: { LEFINE_PROFILE: "mcp" } };
     const spoofs: Record<string, unknown>[] = [
       { ...ours, command: "node" },
-      { command: "sh", args: ["-c", "evil", "-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } },
+      { command: "sh", args: ["-c", "evil", "-y", "lefine@latest", "mcp"], env: { LEFINE_PROFILE: "mcp" } },
       { ...ours, env: { LEFINE_PROFILE: "mcp", NODE_OPTIONS: "--require=/tmp/x.js" } },
-      { ...ours, args: ["-y", "lefine", "mcp", "--evil"] },
-      { command: "npx", args: ["-y", "lefine", "mcp"], env: { PATH: "/tmp/evil" } },
+      { ...ours, args: ["-y", "lefine@latest", "mcp", "--evil"] },
+      { command: "npx", args: ["-y", "lefine@latest", "mcp"], env: { PATH: "/tmp/evil" } },
       { ...ours, extra: true },
     ];
     for (const config of [ours, ...spoofs]) {
@@ -526,8 +526,8 @@ describe("setup without a terminal (JSON)", () => {
     }
   });
   test("--doctor: the exact local entry is fine, a spoofed stdio entry is a problem", async () => {
-    const ok = { client: "cursor" as const, scope: "user" as const, file: "/h/c.json", config: { command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } } };
-    const bad = { client: "zed" as const, scope: "user" as const, file: "/h/z.json", config: { command: "node", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: "mcp" } } };
+    const ok = { client: "cursor" as const, scope: "user" as const, file: "/h/c.json", config: { command: "npx", args: ["-y", "lefine@latest", "mcp"], env: { LEFINE_PROFILE: "mcp" } } };
+    const bad = { client: "zed" as const, scope: "user" as const, file: "/h/z.json", config: { command: "node", args: ["-y", "lefine@latest", "mcp"], env: { LEFINE_PROFILE: "mcp" } } };
     await setupCommand({ doctor: true, check: false }, { env, ops: fakeOps([], [ok, bad]).ops, log, tty: false, settingsFiles: [] });
     const f = report().findings!;
     expect(f.some((x) => x.level === "ok" && x.message.includes("Cursor"))).toBe(true);
@@ -574,12 +574,12 @@ describe("--list, --remove, --doctor, --print", () => {
     expect(code).toBe(1);
     const f = report().findings!;
     const problems = f.filter((x) => x.level === "problem").map((x) => x.message);
-    expect(problems.some((m) => m.includes("local `lefine` entry that is not exactly"))).toBe(true);
+    expect(problems.some((m) => m.includes("no version tag"))).toBe(true);
     expect(problems.some((m) => m.includes("https://old.example.com/mcp"))).toBe(true);
     expect(problems.some((m) => m.includes("deniedMcpServers"))).toBe(true);
     expect(f.some((x) => x.level === "ok" && x.message.includes("VS Code"))).toBe(true);
     expect(f.some((x) => x.level === "warn" && x.message.includes("`claude` command"))).toBe(true);
-    expect(report().next).toContain("npx lefine setup --yes");
+    expect(report().next).toContain("setup --local --yes");
   });
 
   test("--doctor flags spoofed entries: only the real URL field, matched exactly, counts", async () => {

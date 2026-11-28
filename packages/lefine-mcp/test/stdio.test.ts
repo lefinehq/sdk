@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +43,7 @@ afterAll(() => {
 
 /** Starts the bin with stdin as a pipe (so it is the server, not the wizard), sends lines, reads one reply per id. */
 function run(args: string[], env: Record<string, string>) {
-  const child: ChildProcessWithoutNullStreams = spawn(process.execPath, [bin, ...args], { cwd: home, env: { PATH: process.env.PATH ?? "", HOME: home, LEFINE_HOME: join(home, ".lefine"), LEFINE_API_URL: url, ...env } });
+  const child: ChildProcessWithoutNullStreams = spawn(process.execPath, [bin, ...args], { cwd: home, env: { PATH: process.env.PATH ?? "", HOME: home, LEFINE_HOME: join(home, ".lefine"), LEFINE_API_URL: url, LEFINE_NO_UPDATE_CHECK: "1", ...env } });
   let out = "";
   let err = "";
   child.stdout.on("data", (c) => (out += c));
@@ -76,6 +76,30 @@ describe.skipIf(!built)("npx @lefine/mcp over stdio", () => {
       expect(s.stderr()).not.toContain("lfn_e2e");
     } finally {
       s.stop();
+    }
+  });
+
+  it("a newer version in the update cache is said on stderr and added to the initialize instructions; stdout stays JSON-RPC", async () => {
+    mkdirSync(join(home, ".lefine"), { recursive: true });
+    writeFileSync(join(home, ".lefine", "update-check.json"), JSON.stringify({ "@lefine/mcp": { checkedAt: Date.now(), tags: { latest: "0.2.7", next: "9.0.0-rc.1" } } }));
+    const s = run([], { LEFINE_TOKEN: "lfn_e2e", LEFINE_NO_UPDATE_CHECK: "" });
+    try {
+      const init = await s.ask({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } });
+      expect(init.result.instructions).toContain("a newer Lefine MCP (9.0.0-rc.1) is out");
+      expect(s.stderr()).toContain("lefine mcp: 9.0.0-rc.1 is out");
+      expect(() => s.stdout().split("\n").filter(Boolean).forEach((l) => JSON.parse(l))).not.toThrow();
+    } finally {
+      s.stop();
+    }
+    // The same cache with LEFINE_NO_UPDATE_CHECK=1: silent.
+    const quiet = run([], { LEFINE_TOKEN: "lfn_e2e" });
+    try {
+      const init = await quiet.ask({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } });
+      expect(init.result.instructions).toBeUndefined();
+      expect(quiet.stderr()).not.toContain("is out");
+    } finally {
+      quiet.stop();
+      rmSync(join(home, ".lefine", "update-check.json"), { force: true });
     }
   });
 

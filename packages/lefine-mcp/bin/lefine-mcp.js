@@ -18,6 +18,9 @@ if (meta !== null) {
   process.exit(0);
 }
 
+// The update check (in `lefine`) compares THIS package: it is the copy npx keeps, and its version is the one a person runs.
+process.env.LEFINE_HOST_PACKAGE = `${own.name}@${own.version}`;
+
 const manifest = createRequire(import.meta.url).resolve("lefine/package.json");
 const { bin } = JSON.parse(readFileSync(manifest, "utf-8"));
 const args = process.argv.slice(2);

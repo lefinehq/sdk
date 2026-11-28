@@ -20,6 +20,7 @@ import { MCP_ABOUT, resolveMcpOptions } from "./lefine/mcp-config.js";
 import { allowedRoots } from "./lefine/mcp-paths.js";
 import { migrateCommand } from "./lefine/migrate.js";
 import { MCP_HINT, setupCommand, type SetupOptions } from "./lefine/setup-command.js";
+import { aiNotice, cachedUpdate, cliNotice, hostPackage, refreshUpdate, serverNotice, setHost } from "./lefine/update-check.js";
 
 import {
   stringsCheckCommand,
@@ -40,7 +41,19 @@ import { appsCommand, keysCreateCommand, keysDeleteCommand, keysListCommand, lan
 /* The version of the package this file runs from (`dist/lefine.js` sits one
    level under the package root). Read at run time so it works on Node
    without JSON import attributes. */
-const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { version: string };
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as { name: string; version: string };
+// The source is shared with the Better CLI: only a Lefine package name is used for the update check and the config tag.
+setHost({ name: pkg.name === "lefine" || pkg.name.startsWith("@lefine/") ? pkg.name : "lefine", version: pkg.version });
+
+/* "A newer version is out" (update-check.ts). The CLI says it once, at the end of a command, on stderr, and only for
+   a person at a terminal. The MCP server has its own (below): stdout there is the protocol. */
+const serverRun = process.argv[2] === "mcp" && process.argv[3] !== "install";
+if (!serverRun && process.stderr.isTTY) {
+  const host = hostPackage();
+  const known = cachedUpdate(host);
+  if (known) process.once("exit", () => process.stderr.write(`\n${cliNotice(known)}\n`));
+  void refreshUpdate(host);
+}
 
 program
   .name("lefine")
@@ -349,6 +362,11 @@ mcp.action(async (flags: { readOnly?: boolean; readonly?: boolean; toolsets?: st
   // Run by hand, the server waits for an app on stdin and looks stuck: say what it is, on stderr (stdout is MCP only).
   if (process.stdin.isTTY) process.stderr.write(`${MCP_HINT}\n`);
   if (!found) process.stderr.write("lefine mcp: not signed in. Run `npx @lefine/mcp setup` or set LEFINE_TOKEN.\n");
+  // The cached answer of an earlier day: said now (stderr, and the AI app via `instructions`). A refresh runs in the background for the next start.
+  const host = hostPackage();
+  const update = cachedUpdate(host);
+  if (update) process.stderr.write(`${serverNotice(update)}\n`);
+  void refreshUpdate(host);
   const mode = [options.readOnly ? "read-only" : "", options.toolsets ? `toolsets ${[...options.toolsets].join(",")}` : ""].filter(Boolean).join(", ");
   process.stderr.write(`lefine mcp ${pkg.version}${mode ? ` (${mode})` : ""}\n`);
   await runBridge(process.stdin, {
@@ -358,6 +376,7 @@ mcp.action(async (flags: { readOnly?: boolean; readonly?: boolean; toolsets?: st
     log: (line) => process.stderr.write(`${line}\n`),
     clientVersion: pkg.version,
     options,
+    updateNote: update ? aiNotice(update) : null,
   });
 });
 

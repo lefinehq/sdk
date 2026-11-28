@@ -259,7 +259,7 @@ describe("local (stdio) entries", () => {
     const first = await run(["setup", "--client", "cursor", "--local", "--no-check"]);
     expect(first.json.results[0].status).toBe("added");
     const entry = read(cursorFile()).mcpServers.lefine;
-    expect(entry).toMatchObject({ command: "npx", args: ["-y", "lefine", "mcp"] });
+    expect(entry).toMatchObject({ command: "npx", args: ["-y", "lefine@latest", "mcp"] });
     expect(entry.env.LEFINE_PROFILE).toBe("mcp");
     expect((await run(["setup", "--client", "cursor", "--local", "--no-check"])).json.results[0].status).toBe("unchanged");
     const doc = await run(["setup", "--doctor", "--client", "cursor", "--local", "--no-check"]);
@@ -271,8 +271,8 @@ describe("local (stdio) entries", () => {
     mkdirSync(join(home, ".cursor"));
     const env = { LEFINE_PROFILE: "mcp", LEFINE_API_URL: api };
     const spoofs = [
-      { command: "node", args: ["-y", "lefine", "mcp"], env },
-      { command: "npx", args: ["-y", "lefine", "mcp"], env: { ...env, NODE_OPTIONS: "--require=/tmp/x.js" } },
+      { command: "node", args: ["-y", "lefine@latest", "mcp"], env },
+      { command: "npx", args: ["-y", "lefine@latest", "mcp"], env: { ...env, NODE_OPTIONS: "--require=/tmp/x.js" } },
       { command: "sh", args: ["-c", "evil", "LEFINE_PROFILE=mcp"], env },
     ];
     for (const entry of spoofs) {
@@ -353,9 +353,9 @@ describe("remove, list, doctor", () => {
     const r = await run(["setup", "--doctor"]);
     expect(r.code).toBe(1);
     const problems = (r.json.findings as { level: string; message: string }[]).filter((f) => f.level === "problem").map((f) => f.message);
-    expect(problems.some((m) => m.includes("local `lefine` entry that is not exactly"))).toBe(true);
+    expect(problems.some((m) => m.includes("no version tag"))).toBe(true);
     expect(problems.some((m) => m.includes("deniedMcpServers"))).toBe(true);
-    expect(r.json.next).toContain("npx lefine setup");
+    expect(r.json.next).toContain("npx lefine@latest setup --local --yes");
   });
 
   test("--doctor on a clean setup passes and the connection test sees the stub server", async () => {

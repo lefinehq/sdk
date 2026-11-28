@@ -44,6 +44,7 @@ import {
   WRITABLE,
 } from "./setup-clients.js";
 import { clackUi, type SetupUi } from "./setup-ui.js";
+import { type Host, hostPackage, tagOf } from "./update-check.js";
 
 export { CLIENTS, LABEL, MCP_NAME, type ClientId } from "./setup-clients.js";
 export const LOCAL_PROFILE = "mcp";
@@ -61,9 +62,19 @@ export const realEnv = (): SetupEnv => ({ home: homedir(), platform: process.pla
 
 export const remoteUrl = (apiUrl?: string, readonly = false): string => `${resolveApiUrl(apiUrl)}/v1/mcp${readonly ? "?level=read" : ""}`;
 
+/**
+ * The npx arguments of the local server, with a tag so every restart asks the registry (an untagged `npx -y lefine`
+ * keeps the first copy it cached, for ever). The package is the one the person ran: `@lefine/mcp@<tag>` from
+ * `npx @lefine/mcp ...`, else `lefine@<tag> mcp`. The tag: a prerelease is `next`, anything else `latest`.
+ */
+export function localNpxArgs(host: Host = hostPackage()): string[] {
+  const spec = `${host.name}@${tagOf(host.version)}`;
+  return host.name === "@lefine/mcp" ? ["-y", spec] : ["-y", spec, "mcp"];
+}
+
 export function serverEntry(local: boolean, apiUrl?: string, readonly = false): ServerEntry {
   if (local) {
-    const entry: ServerEntry = { command: "npx", args: ["-y", "lefine", "mcp"], env: { LEFINE_PROFILE: LOCAL_PROFILE } };
+    const entry: ServerEntry = { command: "npx", args: localNpxArgs(), env: { LEFINE_PROFILE: LOCAL_PROFILE } };
     const api = apiUrl || process.env.LEFINE_API_URL;
     if (api) entry.env = { ...entry.env, LEFINE_API_URL: resolveApiUrl(api) };
     return entry;
@@ -136,7 +147,7 @@ export function claudeAddArgs(local: boolean, apiUrl?: string, readonly = false,
   const env = ["-e", `LEFINE_PROFILE=${LOCAL_PROFILE}`];
   const api = apiUrl || process.env.LEFINE_API_URL;
   if (api) env.push("-e", `LEFINE_API_URL=${resolveApiUrl(api)}`);
-  return ["mcp", "add", "--scope", scope, ...env, MCP_NAME, "--", "npx", "-y", "lefine", "mcp"];
+  return ["mcp", "add", "--scope", scope, ...env, MCP_NAME, "--", "npx", ...localNpxArgs()];
 }
 
 export interface ClientOutcome {
@@ -584,7 +595,7 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
     const have = parseClaudeGet(got.output);
     const stdio = have.type === "stdio";
     const ours = stdio && claudeStdioMatches(have);
-    return [{ client: "claude-code", scope: have.scope === "user" ? "user" : "project", file: "claude mcp get lefine", config: stdio ? (ours ? { command: "npx", args: ["-y", "lefine", "mcp"], env: expectedClaudeStdio().env } : { command: have.command ?? "?", args: (have.args ?? "").split(/\s+/).filter(Boolean), env: { ...(have.env ?? {}), ...(have.malformed ? { "?": "malformed" } : {}) } }) : { url: have.url ?? "" } }];
+    return [{ client: "claude-code", scope: have.scope === "user" ? "user" : "project", file: "claude mcp get lefine", config: stdio ? (ours ? { command: "npx", args: localNpxArgs(), env: expectedClaudeStdio().env } : { command: have.command ?? "?", args: (have.args ?? "").split(/\s+/).filter(Boolean), env: { ...(have.env ?? {}), ...(have.malformed ? { "?": "malformed" } : {}) } }) : { url: have.url ?? "" } }];
   }
 
   async function allInstalled(clients?: ClientId[]): Promise<Installed[]> {
@@ -664,9 +675,15 @@ export async function setupCommand(options: SetupOptions, deps: SetupDeps = {}):
       const u = storedUrl(ops.urlField(r.client), r.config);
       const localOk = isStdio(r.config) && sameJson(r.config, ops.shape(r.client, serverEntry(true, options.apiUrl)));
       if (localOk) {
-        findings.push({ level: "ok", client: r.client, message: `${LABEL[r.client]}: lefine is the local server (npx -y lefine mcp, profile ${LOCAL_PROFILE})` });
+        findings.push({ level: "ok", client: r.client, message: `${LABEL[r.client]}: lefine is the local server (npx ${localNpxArgs().join(" ")}, profile ${LOCAL_PROFILE})` });
       } else if (isStdio(r.config)) {
-        findings.push({ level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) has a local \`lefine\` entry that is not exactly the one setup writes (another command, args or env), instead of ${base}`, fix: "npx lefine setup --yes (it replaces the entry)" });
+        // npx keeps the first copy of an untagged package for ever; a tag makes every restart ask the registry.
+        const untagged = !Array.isArray(r.config.args) || !(r.config.args as unknown[]).some((a) => typeof a === "string" && /^(@lefine\/mcp|lefine)@/.test(a));
+        findings.push(
+          untagged
+            ? { level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) starts Lefine with no version tag, so npx keeps an old copy and a restart does not update it`, fix: `npx ${hostPackage().name}@${tagOf(hostPackage().version)} setup --local --yes (it replaces the entry)` }
+            : { level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) has a local \`lefine\` entry that is not exactly the one setup writes (another command, args or env), instead of ${base}`, fix: `npx ${hostPackage().name}@${tagOf(hostPackage().version)} setup --local --yes (it replaces the entry)` },
+        );
       } else if (!u || !accepted.some((a) => sameUrl(u, a))) {
         findings.push({ level: "problem", client: r.client, message: `${LABEL[r.client]} (${tidy(r.file)}) ${u ? `points \`lefine\` at ${u}` : "has a `lefine` entry with no URL where the app reads it"}, not ${accepted.join(" or ")}`, fix: "npx lefine setup --yes (it replaces the entry)" });
       } else findings.push({ level: "ok", client: r.client, message: `${LABEL[r.client]}: lefine points at ${u}` });
